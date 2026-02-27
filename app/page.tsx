@@ -524,5 +524,4 @@ const styles: any = {
   transition: "all 0.3s ease",
   color: "#94a3b8"
 },
-);
 }
