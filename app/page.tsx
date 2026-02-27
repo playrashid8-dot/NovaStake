@@ -41,10 +41,21 @@ export default function Home() {
   return;
 }
 
-const provider = new ethers.providers.Web3Provider(window.ethereum);
-    const accounts = await provider.send("eth_requestAccounts", []);
-    setWallet(accounts[0]);
-  };
+const connectWallet = async () => {
+  if (typeof window === "undefined") return;
+
+  if (!window.ethereum) {
+    alert("Install MetaMask");
+    return;
+  }
+
+  const provider = new ethers.providers.Web3Provider(
+    window.ethereum as any
+  );
+
+  const accounts = await provider.send("eth_requestAccounts", []);
+  setWallet(accounts[0]);
+};
 
   const loadUserData = async () => {
     if (!wallet) return;
