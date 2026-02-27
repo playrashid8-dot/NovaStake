@@ -383,7 +383,7 @@ const connectWallet = async () => {
     </div>
   );
 }
-
+}
 function Stat({ title, value }: any) {
   return (
     <div style={styles.statCard}>
@@ -524,5 +524,5 @@ const styles: any = {
   transition: "all 0.3s ease",
   color: "#94a3b8"
 },
-
-};
+);
+}
