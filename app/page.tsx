@@ -1,40 +1,66 @@
-"use client"
+"use client";
 
-import { useRouter } from "next/navigation"
-import { Rocket, Lock, TrendingUp, Users, Shield, Wallet } from "lucide-react"
+import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { Rocket, Lock, TrendingUp, Users, Shield, Wallet } from "lucide-react";
 
 export default function Home() {
-  const router = useRouter()
+  const router = useRouter();
+  const [wallet, setWallet] = useState<string | null>(null);
 
+  // ✅ Connect Wallet
   async function connectWallet() {
-  if (!(window as any).ethereum) {
-    alert("Install MetaMask");
-    return;
+    if (!(window as any).ethereum) {
+      alert("Install MetaMask");
+      return;
+    }
+
+    const accounts = await (window as any).ethereum.request({
+      method: "eth_requestAccounts",
+    });
+
+    const chainId = await (window as any).ethereum.request({
+      method: "eth_chainId",
+    });
+
+    if (chainId !== "0x61") {
+      alert("Please switch to BSC Testnet (Chain ID 97)");
+      return;
+    }
+
+    setWallet(accounts[0]);
+    localStorage.setItem("wallet", accounts[0]);
+
+    router.push("/dashboard");
   }
 
-  // 1️⃣ Request account
-  await (window as any).ethereum.request({
-    method: "eth_requestAccounts",
-  });
-
-  // 2️⃣ Check Network
-  const chainId = await (window as any).ethereum.request({
-    method: "eth_chainId",
-  });
-
-  if (chainId !== "0x61") {
-    alert("Please switch to BSC Testnet (Chain ID 97)");
-    return;
+  // ✅ Logout
+  function logout() {
+    setWallet(null);
+    localStorage.removeItem("wallet");
   }
 
-  // 3️⃣ Go to dashboard
-  router.push("/dashboard");
-}
+  // ✅ Restore wallet on refresh
+  useEffect(() => {
+    const saved = localStorage.getItem("wallet");
+    if (saved) setWallet(saved);
+
+    // Auto update on account change
+    if ((window as any).ethereum) {
+      (window as any).ethereum.on("accountsChanged", (accounts: string[]) => {
+        if (accounts.length > 0) {
+          setWallet(accounts[0]);
+          localStorage.setItem("wallet", accounts[0]);
+        } else {
+          logout();
+        }
+      });
+    }
+  }, []);
 
   return (
     <div className="min-h-screen relative text-white overflow-hidden">
-
-      {/* Background Galaxy */}
+      {/* Background */}
       <div className="absolute inset-0 bg-[url('/space.jpg')] bg-cover bg-center" />
       <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" />
 
@@ -43,12 +69,28 @@ export default function Home() {
         {/* NAVBAR */}
         <div className="flex justify-between items-center px-10 py-6">
           <h1 className="text-2xl font-bold">NovaDeFi</h1>
-          <button
-            onClick={connectWallet}
-            className="px-6 py-2 rounded-lg border border-green-400 bg-green-500/20 hover:bg-green-500/40 transition"
-          >
-            Connect Wallet
-          </button>
+
+          {wallet ? (
+            <div className="flex items-center gap-4">
+              <span className="text-green-400 text-sm">
+                {wallet.slice(0, 6)}...{wallet.slice(-4)}
+              </span>
+
+              <button
+                onClick={logout}
+                className="px-4 py-2 rounded-lg bg-red-500 hover:opacity-80 transition"
+              >
+                Logout
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={connectWallet}
+              className="px-6 py-2 rounded-lg border border-green-400 bg-green-500/20 hover:bg-green-500/40 transition"
+            >
+              Connect Wallet
+            </button>
+          )}
         </div>
 
         {/* HERO */}
@@ -63,12 +105,14 @@ export default function Home() {
             NovaDeFi’s secure income engine.
           </p>
 
-          <button
-            onClick={connectWallet}
-            className="mt-10 px-10 py-4 rounded-xl bg-gradient-to-r from-green-400 to-blue-500 hover:scale-105 transition duration-300 shadow-lg shadow-green-500/30"
-          >
-            Connect Wallet
-          </button>
+          {!wallet && (
+            <button
+              onClick={connectWallet}
+              className="mt-10 px-10 py-4 rounded-xl bg-gradient-to-r from-green-400 to-blue-500 hover:scale-105 transition duration-300 shadow-lg shadow-green-500/30"
+            >
+              Connect Wallet
+            </button>
+          )}
         </div>
 
         {/* FEATURES */}
@@ -88,27 +132,6 @@ export default function Home() {
               {item.text}
             </div>
           ))}
-        </div>
-
-        {/* HOW IT WORKS */}
-        <div className="mt-24 text-center">
-          <h2 className="text-3xl font-semibold mb-12">How It Works</h2>
-
-          <div className="grid md:grid-cols-4 gap-10 px-10">
-            {[
-              "Deposit USDT",
-              "Earn Daily ROI",
-              "Build Team",
-              "Withdraw Securely",
-            ].map((step, i) => (
-              <div
-                key={i}
-                className="p-6 rounded-full bg-white/10 backdrop-blur-lg border border-white/20 hover:scale-110 transition duration-300"
-              >
-                {step}
-              </div>
-            ))}
-          </div>
         </div>
 
         {/* STATS */}
@@ -133,8 +156,7 @@ export default function Home() {
         <div className="text-center py-10 border-t border-white/10 text-gray-400 text-sm">
           © 2026 NovaDeFi. All rights reserved.
         </div>
-
       </div>
     </div>
-  )
+  );
 }
