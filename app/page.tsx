@@ -7,17 +7,29 @@ export default function Home() {
   const router = useRouter()
 
   async function connectWallet() {
-    if (!(window as any).ethereum) {
-      alert("Install MetaMask")
-      return
-    }
-
-    await (window as any).ethereum.request({
-      method: "eth_requestAccounts",
-    })
-
-    router.push("/dashboard")
+  if (!(window as any).ethereum) {
+    alert("Install MetaMask");
+    return;
   }
+
+  // 1️⃣ Request account
+  await (window as any).ethereum.request({
+    method: "eth_requestAccounts",
+  });
+
+  // 2️⃣ Check Network
+  const chainId = await (window as any).ethereum.request({
+    method: "eth_chainId",
+  });
+
+  if (chainId !== "0x61") {
+    alert("Please switch to BSC Testnet (Chain ID 97)");
+    return;
+  }
+
+  // 3️⃣ Go to dashboard
+  router.push("/dashboard");
+}
 
   return (
     <div className="min-h-screen relative text-white overflow-hidden">
