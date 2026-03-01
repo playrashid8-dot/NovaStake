@@ -1,11 +1,11 @@
-"use client"
+"use client";
 
-import BottomNav from "@/app/components/BottomNav"
+import BottomNav from "@/app/components/BottomNav";
 
 export default function DashboardLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <>
@@ -15,5 +15,5 @@ export default function DashboardLayout({
 
       <BottomNav />
     </>
-  )
+  );
 }

@@ -1,7 +1,7 @@
-"use client"
+"use client";
 
-import { useState } from "react"
-import { motion, AnimatePresence } from "framer-motion"
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   LayoutDashboard,
   Wallet,
@@ -10,18 +10,18 @@ import {
   BarChart3,
   Menu,
   X,
-} from "lucide-react"
+} from "lucide-react";
 
-import StatsGrid from "@/app/components/StatsGrid"
-import DepositPanel from "@/app/components/DepositPanel"
-import WithdrawPanel from "@/app/components/WithdrawPanel"
-import StakingSection from "@/app/components/StakingSection"
-import TeamSection from "@/app/components/TeamSection"
-import AnalyticsSection from "@/app/components/AnalyticsSection"
+import StatsGrid from "@/app/components/StatsGrid";
+import DepositPanel from "@/app/components/DepositPanel";
+import WithdrawPanel from "@/app/components/WithdrawPanel";
+import StakingSection from "@/app/components/StakingSection";
+import TeamSection from "@/app/components/TeamSection";
+import AnalyticsSection from "@/app/components/AnalyticsSection";
 
 export default function Dashboard() {
-  const [active, setActive] = useState("dashboard")
-  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState("dashboard");
+  const [open, setOpen] = useState(false);
 
   const menu = [
     { key: "dashboard", icon: <LayoutDashboard size={18} /> },
@@ -29,12 +29,12 @@ export default function Dashboard() {
     { key: "staking", icon: <TrendingUp size={18} /> },
     { key: "team", icon: <Users size={18} /> },
     { key: "analytics", icon: <BarChart3 size={18} /> },
-  ]
+  ];
 
   return (
     <div className="flex min-h-screen bg-gradient-to-br from-[#0f0c29] via-[#1a1a3c] to-[#24243e] text-white">
 
-      {/* Desktop Sidebar */}
+      {/* ================= SIDEBAR DESKTOP ================= */}
       <div className="w-64 bg-white/5 backdrop-blur-xl border-r border-white/10 p-6 hidden md:block">
         <h2 className="text-2xl font-bold mb-10">NovaDeFi</h2>
 
@@ -54,11 +54,10 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Mobile Sidebar */}
+      {/* ================= MOBILE SIDEBAR ================= */}
       <AnimatePresence>
         {open && (
           <>
-            {/* Overlay */}
             <motion.div
               className="fixed inset-0 bg-black/60 z-40"
               initial={{ opacity: 0 }}
@@ -67,7 +66,6 @@ export default function Dashboard() {
               onClick={() => setOpen(false)}
             />
 
-            {/* Drawer */}
             <motion.div
               className="fixed left-0 top-0 h-full w-64 bg-[#111] p-6 z-50"
               initial={{ x: -300 }}
@@ -84,8 +82,8 @@ export default function Dashboard() {
                 <div
                   key={item.key}
                   onClick={() => {
-                    setActive(item.key)
-                    setOpen(false)
+                    setActive(item.key);
+                    setOpen(false);
                   }}
                   className={`flex items-center gap-3 mb-6 cursor-pointer capitalize ${
                     active === item.key
@@ -102,24 +100,18 @@ export default function Dashboard() {
         )}
       </AnimatePresence>
 
-      {/* Main Content */}
+      {/* ================= MAIN CONTENT ================= */}
       <div className="flex-1 p-6 md:p-10">
 
-        {/* Top Bar */}
-        <div className="flex justify-between items-center mb-12">
-          <div className="flex items-center gap-4">
-            <Menu
-              className="md:hidden cursor-pointer"
-              onClick={() => setOpen(true)}
-            />
-            <h1 className="text-2xl md:text-3xl font-bold capitalize">
-              {active}
-            </h1>
-          </div>
-
-          <div className="px-4 py-2 rounded-lg bg-green-500/20 border border-green-400/30 text-sm">
-            0x6380...594a
-          </div>
+        {/* Top Title Bar */}
+        <div className="flex items-center gap-4 mb-12">
+          <Menu
+            className="md:hidden cursor-pointer"
+            onClick={() => setOpen(true)}
+          />
+          <h1 className="text-2xl md:text-3xl font-bold capitalize">
+            {active}
+          </h1>
         </div>
 
         <AnimatePresence mode="wait">
@@ -131,19 +123,20 @@ export default function Dashboard() {
             transition={{ duration: 0.4 }}
           >
             {active === "dashboard" && <StatsGrid />}
+
             {active === "deposit" && (
               <div className="grid md:grid-cols-2 gap-10">
                 <DepositPanel />
                 <WithdrawPanel />
               </div>
             )}
+
             {active === "staking" && <StakingSection />}
             {active === "team" && <TeamSection />}
             {active === "analytics" && <AnalyticsSection />}
           </motion.div>
         </AnimatePresence>
-
       </div>
     </div>
-  )
+  );
 }

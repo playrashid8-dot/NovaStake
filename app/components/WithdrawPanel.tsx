@@ -1,50 +1,67 @@
-"use client"
+"use client";
+
+import { useState } from "react";
+import { ethers } from "ethers";
+import {
+  getNovaDefiContract,
+  ensureMainnet,
+} from "@/lib/web3";
 
 export default function WithdrawPanel() {
-  return (
-    <div style={styles.card}>
-      <h3>Withdraw</h3>
+  const [amount, setAmount] = useState("");
+  const [loading, setLoading] = useState(false);
 
-      <p>Available: 0 USDT</p>
-      <p>Daily Limit: 500 USDT</p>
+  async function handleWithdraw() {
+    if (!amount) return alert("Enter amount");
+
+    try {
+      setLoading(true);
+
+      await ensureMainnet();
+
+      const defi = await getNovaDefiContract();
+
+      const parsedAmount = ethers.utils.parseUnits(amount, 18);
+
+      const withdrawTx = await defi.withdraw(parsedAmount);
+      await withdrawTx.wait();
+
+      alert("Withdrawal Successful 🚀");
+      setAmount("");
+    } catch (err: any) {
+      console.error(err);
+
+      if (err?.error?.message) {
+        alert(err.error.message);
+      } else {
+        alert("Withdrawal Failed ❌");
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="p-6 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 shadow-lg mt-6">
+      <h2 className="text-xl font-semibold mb-4">
+        Withdraw USDT
+      </h2>
 
       <input
         type="number"
         placeholder="Enter amount"
-        style={styles.input}
+        value={amount}
+        onChange={(e) => setAmount(e.target.value)}
+        className="w-full p-3 rounded-lg bg-black/40 border border-white/20 text-white mb-4"
       />
 
-      <button style={styles.btnRed}>Request Withdraw</button>
-
-      <div style={{ marginTop: 15 }}>
-        <p>Pending: 0 USDT</p>
-        <p>Releases in: 00h 00m</p>
-      </div>
+      <button
+        onClick={handleWithdraw}
+        disabled={loading}
+        className="w-full py-3 rounded-lg bg-gradient-to-r from-purple-400 to-pink-500 font-semibold hover:opacity-90 transition"
+      >
+        {loading ? "Processing..." : "Withdraw"}
+      </button>
     </div>
-  )
-}
-
-const styles: any = {
-  card: {
-    background: "rgba(255,255,255,0.05)",
-    padding: 20,
-    borderRadius: 12,
-    marginBottom: 40,
-  },
-  input: {
-    width: "100%",
-    padding: 12,
-    marginTop: 10,
-    borderRadius: 8,
-    border: "none",
-  },
-  btnRed: {
-    marginTop: 10,
-    padding: 10,
-    borderRadius: 8,
-    border: "none",
-    background: "#dc2626",
-    color: "white",
-    cursor: "pointer",
-  },
+  );
 }
