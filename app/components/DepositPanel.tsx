@@ -37,12 +37,14 @@ export default function DepositPanel() {
     },
   });
 
-  /* ================= SAFE APPROVAL CHECK ================= */
+  //* ================= SAFE ALLOWANCE HANDLING ================= */
 
-  const currentAllowance = allowance ?? 0n;
+const safeAllowance =
+  typeof allowance === "bigint" ? allowance : BigInt(0);
 
-  const needsApproval =
-    parsedAmount > 0n && currentAllowance < parsedAmount;
+const needsApproval =
+  parsedAmount > BigInt(0) &&
+  safeAllowance < parsedAmount;
 
   /* ================= HANDLE DEPOSIT ================= */
 
