@@ -7,88 +7,33 @@ import { ethers } from "ethers";
 ================================ */
 
 export const NOVADEFI_ADDRESS =
-  "0xc3cEf0D35da2eB4Ed4aFbd5181b56B96Cda610A1";
+  "0x9e2d260C301357883B5dAc9a68b23aC4f05fe6EA";
 
 export const USDT_ADDRESS =
-  "0x55d398326f99059fF775485246999027B3197955"; // BEP20 USDT
+  "0x55d398326f99059fF775485246999027B3197955";
 
 export const BSC_CHAIN_ID = "0x38"; // 56
 
 /* ================================
-   📜 NovaDeFi ABI (FULL)
+   📜 UPDATED CONTRACT ABI
 ================================ */
 
 export const NOVADEFI_ABI = [
-  {
-    inputs: [{ internalType: "address", name: "_treasury", type: "address" }],
-    stateMutability: "nonpayable",
-    type: "constructor",
-  },
-  {
-    inputs: [{ internalType: "uint256", name: "salaryAmt", type: "uint256" }],
-    name: "claimSalary",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [
-      { internalType: "uint256", name: "_amount", type: "uint256" },
-      { internalType: "address", name: "_referrer", type: "address" },
-    ],
-    name: "deposit",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  {
-    inputs: [{ internalType: "address", name: "_user", type: "address" }],
-    name: "getPendingRewards",
-    outputs: [{ internalType: "uint256", name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function",
-  },
-  { inputs: [], name: "owner", outputs: [{ internalType: "address", name: "", type: "address" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "totalInvested", outputs: [{ internalType: "uint256", name: "", type: "uint256" }], stateMutability: "view", type: "function" },
-  { inputs: [], name: "treasury", outputs: [{ internalType: "address", name: "", type: "address" }], stateMutability: "view", type: "function" },
-  {
-    inputs: [
-      { internalType: "address", name: "_user", type: "address" },
-      { internalType: "uint8", name: "_lv", type: "uint8" },
-    ],
-    name: "updateLevel",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
-  { inputs: [], name: "usdt", outputs: [{ internalType: "address", name: "", type: "address" }], stateMutability: "view", type: "function" },
-  {
-    inputs: [{ internalType: "address", name: "", type: "address" }],
-    name: "users",
-    outputs: [
-      { internalType: "uint256", name: "depositAmt", type: "uint256" },
-      { internalType: "uint256", name: "rewardBalance", type: "uint256" },
-      { internalType: "uint256", name: "lastUpdate", type: "uint256" },
-      { internalType: "uint256", name: "totalWithdrawn", type: "uint256" },
-      { internalType: "uint256", name: "monthlyWithdrawn", type: "uint256" },
-      { internalType: "uint256", name: "lastMonthReset", type: "uint256" },
-      { internalType: "address", name: "referrer", type: "address" },
-      { internalType: "uint8", name: "level", type: "uint8" },
-      { internalType: "uint256", name: "teamCountL3", type: "uint256" },
-      { internalType: "uint256", name: "lastSalaryTeamSnapshot", type: "uint256" },
-      { internalType: "uint256", name: "depositTime", type: "uint256" },
-      { internalType: "bool", name: "exists", type: "bool" },
-    ],
-    stateMutability: "view",
-    type: "function",
-  },
-  {
-    inputs: [{ internalType: "uint256", name: "_amount", type: "uint256" }],
-    name: "withdraw",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function",
-  },
+  "function deposit(uint256 amount,address referrer)",
+  "function withdraw(uint256 amount)",
+  "function claimSalary()",
+  "function createStake(uint256 amount,uint256 daysPeriod)",
+  "function claimStake(uint256 index)",
+  "function updateReward(address userAddr)",
+  "function updateTreasury(address newWallet)",
+  "function treasury() view returns(address)",
+  "function owner() view returns(address)",
+  "function MIN_DEPOSIT() view returns(uint256)",
+  "function LOCK_PERIOD() view returns(uint256)",
+  "function WITHDRAW_COOLDOWN() view returns(uint256)",
+  "function ADMIN_FEE() view returns(uint256)",
+  "function users(address) view returns(uint256 depositBalance,uint256 stakedBalance,uint256 rewardBalance,uint256 lastUpdate,uint256 depositTime,uint256 lastWithdrawTime,address referrer,uint8 level,uint256 directCount,uint256 teamCount,uint8 salaryStage,uint256 lastSalaryTeam)",
+  "function userStakes(address,uint256) view returns(uint256 amount,uint256 startTime,uint256 endTime,uint256 dailyRate,bool claimed)"
 ];
 
 /* ================================
@@ -96,9 +41,9 @@ export const NOVADEFI_ABI = [
 ================================ */
 
 export const ERC20_ABI = [
-  "function approve(address spender,uint256 amount) external returns (bool)",
-  "function allowance(address owner,address spender) view returns (uint256)",
-  "function balanceOf(address account) view returns (uint256)",
+  "function approve(address spender,uint256 amount) returns(bool)",
+  "function allowance(address owner,address spender) view returns(uint256)",
+  "function balanceOf(address account) view returns(uint256)"
 ];
 
 /* ================================
@@ -136,7 +81,7 @@ export async function getNovaDefiContract() {
 }
 
 /* ================================
-   🔄 ENSURE MAINNET
+   🔄 ENSURE BSC MAINNET
 ================================ */
 
 export async function ensureMainnet() {
@@ -149,4 +94,16 @@ export async function ensureMainnet() {
       params: [{ chainId: BSC_CHAIN_ID }],
     });
   }
+}
+
+/* ================================
+   💰 HELPER (18 DECIMAL SAFE)
+================================ */
+
+export function toWei(amount: string) {
+  return ethers.utils.parseUnits(amount, 18);
+}
+
+export function fromWei(amount: any) {
+  return ethers.utils.formatUnits(amount, 18);
 }

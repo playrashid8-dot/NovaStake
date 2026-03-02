@@ -1,34 +1,99 @@
-"use client"
+"use client";
+
+import { useAccount, useReadContract } from "wagmi";
+import { formatUnits } from "viem";
+import { NOVADEFI_ADDRESS } from "@/lib/contract";
+import { novadefiAbi } from "@/lib/novadefiAbi";
 
 export default function StatsGrid() {
-  const stats = [
-    { title: "Total Deposit", value: "0 USDT" },
-    { title: "Pending ROI", value: "0 USDT" },
-    { title: "Total Withdrawn", value: "0 USDT" },
-    { title: "Available Balance", value: "0 USDT" },
-    { title: "Direct Referrals", value: "0" },
-    { title: "Total Team", value: "0" },
-    { title: "Current Level", value: "0" },
-    { title: "Salary Earned", value: "0 USDT" },
-    { title: "Active Staking", value: "0 USDT" },
-    { title: "ROI Cap Remaining", value: "0 USDT" },
-    { title: "Lock Status", value: "Inactive" },
-    { title: "Contract Balance", value: "0 USDT" },
-  ]
+  const { address } = useAccount();
+
+  // USER STRUCT
+  const { data: userData } = useReadContract({
+    address: NOVADEFI_ADDRESS,
+    abi: novadefiAbi,
+    functionName: "users",
+    args: address ? [address] : undefined,
+  });
+
+  // PENDING REWARDS
+  const { data: rewardsData } = useReadContract({
+    address: NOVADEFI_ADDRESS,
+    abi: novadefiAbi,
+    functionName: "getPendingRewards",
+    args: address ? [address] : undefined,
+  });
+
+  // TOTAL INVESTED
+  const { data: totalData } = useReadContract({
+    address: NOVADEFI_ADDRESS,
+    abi: novadefiAbi,
+    functionName: "totalInvested",
+  });
+
+  // TREASURY
+  const { data: treasuryData } = useReadContract({
+    address: NOVADEFI_ADDRESS,
+    abi: novadefiAbi,
+    functionName: "treasury",
+  });
+
+  // 🔥 SAFE TYPE CASTING
+  const user = userData as any;
+  const rewards = rewardsData as bigint | undefined;
+  const total = totalData as bigint | undefined;
+  const treasury = treasuryData as string | undefined;
+
+  const deposit = user?.depositAmt
+    ? formatUnits(user.depositAmt as bigint, 18)
+    : "0";
+
+  const pending = rewards
+    ? formatUnits(rewards, 18)
+    : "0";
+
+  const totalInvested = total
+    ? formatUnits(total, 18)
+    : "0";
+
+  const level = user?.level ?? 0;
 
   return (
-    <div className="grid md:grid-cols-3 gap-8">
-      {stats.map((item, i) => (
-        <div
-          key={i}
-          className="p-6 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 shadow-lg shadow-purple-500/20 hover:scale-105 transition duration-300"
-        >
-          <p className="text-gray-300 text-sm">{item.title}</p>
-          <h3 className="text-2xl font-bold mt-3 text-white">
-            {item.value}
-          </h3>
-        </div>
-      ))}
+    <div className="grid md:grid-cols-5 gap-6">
+
+      <div className="p-6 bg-white/10 rounded-xl">
+        <p className="text-sm text-gray-400">Your Deposit</p>
+        <h2 className="text-2xl font-bold">{deposit} USDT</h2>
+      </div>
+
+      <div className="p-6 bg-white/10 rounded-xl">
+        <p className="text-sm text-gray-400">Pending Rewards</p>
+        <h2 className="text-2xl font-bold text-green-400">
+          {pending} USDT
+        </h2>
+      </div>
+
+      <div className="p-6 bg-white/10 rounded-xl">
+        <p className="text-sm text-gray-400">Your Level</p>
+        <h2 className="text-2xl font-bold">
+          Level {level}
+        </h2>
+      </div>
+
+      <div className="p-6 bg-white/10 rounded-xl">
+        <p className="text-sm text-gray-400">Total Platform Invested</p>
+        <h2 className="text-2xl font-bold">
+          {totalInvested} USDT
+        </h2>
+      </div>
+
+      <div className="p-6 bg-white/10 rounded-xl">
+        <p className="text-sm text-gray-400">Treasury Address</p>
+        <h2 className="text-xs font-mono break-all">
+          {treasury ?? "Loading..."}
+        </h2>
+      </div>
+
     </div>
-  )
+  );
 }
