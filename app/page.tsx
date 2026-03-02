@@ -1,78 +1,25 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ethers } from "ethers";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { ensureMainnet } from "@/lib/web3";
-import StatsGrid from "./components/StatsGrid";
+import { useAccount } from "wagmi";
 
 export default function Home() {
-  const [account, setAccount] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
   const router = useRouter();
+  const { isConnected } = useAccount();
 
-  // 🔥 Auto Detect Wallet
+  /* 🔥 Auto Redirect if Connected */
   useEffect(() => {
-  async function checkWallet() {
-    if (!(window as any).ethereum) return;
-
-    // 🚫 Stop auto reconnect if manually disconnected
-    const disconnected = localStorage.getItem("nova_disconnected");
-    if (disconnected === "true") return;
-
-    const provider = new ethers.providers.Web3Provider(
-      (window as any).ethereum
-    );
-
-    const accounts = await provider.listAccounts();
-
-    if (accounts.length > 0) {
-      setAccount(accounts[0]);
+    if (isConnected) {
       router.push("/dashboard");
     }
-  }
-
-  checkWallet();
-}, [router])
-
-  // 🔥 Connect Wallet
-  async function connectWallet() {
-    try {
-      setLoading(true);
-
-      if (!(window as any).ethereum) {
-        alert("Install MetaMask");
-        return;
-      }
-
-      await ensureMainnet();
-
-      const provider = new ethers.providers.Web3Provider(
-        (window as any).ethereum
-      );
-
-      await provider.send("eth_requestAccounts", []);
-
-      const signer = provider.getSigner();
-      const address = await signer.getAddress();
-
-      setAccount(address);
-
-      // Redirect after connect
-      router.push("/dashboard");
-    } catch (err) {
-      console.log(err);
-      alert("Connection failed");
-    } finally {
-      setLoading(false);
-    }
-  }
+  }, [isConnected, router]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-black via-gray-900 to-black text-white flex flex-col justify-between">
 
-      {/* HERO SECTION */}
-      <section className="flex flex-col items-center justify-center text-center py-32 px-6">
+      {/* HERO */}
+      <section className="flex flex-col items-center justify-center text-center py-28 px-6">
 
         <h1 className="text-5xl md:text-6xl font-extrabold mb-6 bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent">
           NovaDeFi
@@ -84,16 +31,15 @@ export default function Home() {
         </p>
 
         <button
-          onClick={connectWallet}
-          disabled={loading}
+          onClick={() => router.push("/dashboard")}
           className="px-8 py-4 rounded-2xl bg-gradient-to-r from-green-400 to-blue-500 text-black font-semibold shadow-lg hover:opacity-90 transition"
         >
-          {loading ? "Connecting..." : "Connect Wallet"}
+          Enter Dashboard
         </button>
 
       </section>
 
-      {/* FEATURES SECTION */}
+      {/* FEATURES */}
       <section className="grid md:grid-cols-4 gap-6 px-6 pb-20">
 
         {[

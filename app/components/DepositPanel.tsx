@@ -1,163 +1,132 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ethers } from "ethers";
+import { useState, useMemo } from "react";
+import { useAccount, useReadContract, useWriteContract } from "wagmi";
+import { parseUnits } from "viem";
 import {
-  getUSDTContract,
-  getNovaDefiContract,
   NOVADEFI_ADDRESS,
-  ensureMainnet,
-  toWei,
-  fromWei,
+  NOVADEFI_ABI,
+  USDT_ADDRESS,
+  ERC20_ABI,
 } from "@/lib/web3";
 
 export default function DepositPanel() {
+  const { address, isConnected } = useAccount();
+  const { writeContractAsync } = useWriteContract();
+
   const [amount, setAmount] = useState("");
+  const [referrer, setReferrer] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const [depositBalance, setDepositBalance] = useState("0");
-  const [rewardBalance, setRewardBalance] = useState("0");
-  const [level, setLevel] = useState(0);
-  const [teamCount, setTeamCount] = useState(0);
+  /* ================= SAFE PARSED AMOUNT ================= */
 
-  const [referrer, setReferrer] = useState(
-    "0x0000000000000000000000000000000000000000"
-  );
+  const parsedAmount = useMemo(() => {
+    if (!amount || isNaN(Number(amount))) return 0n;
+    return parseUnits(amount, 18);
+  }, [amount]);
 
-  /* ============================
-     AUTO REFERRAL FROM URL
-  ============================ */
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const params = new URLSearchParams(window.location.search);
-      const ref = params.get("ref");
+  /* ================= READ ALLOWANCE ================= */
 
-      if (ref && ethers.utils.isAddress(ref)) {
-        setReferrer(ref);
-      }
-    }
-  }, []);
+  const { data: allowance } = useReadContract({
+    address: USDT_ADDRESS,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args: address ? [address, NOVADEFI_ADDRESS] : undefined,
+    query: {
+      enabled: !!address,
+    },
+  });
 
-  /* ============================
-     LOAD USER DATA (SAFE)
-  ============================ */
-  async function loadUser() {
+  /* ================= SAFE APPROVAL CHECK ================= */
+
+  const currentAllowance = allowance ?? 0n;
+
+  const needsApproval =
+    parsedAmount > 0n && currentAllowance < parsedAmount;
+
+  /* ================= HANDLE DEPOSIT ================= */
+
+  async function handleDeposit() {
+    if (!parsedAmount || parsedAmount <= 0n || !address) return;
+
+    setLoading(true);
+
     try {
-      await ensureMainnet();
-      const defi = await getNovaDefiContract();
-      const signer = await defi.signer.getAddress();
+      /* 1️⃣ Approve if needed */
+      if (needsApproval) {
+        await writeContractAsync({
+          address: USDT_ADDRESS,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [NOVADEFI_ADDRESS, parsedAmount],
+        });
+      }
 
-      const user = await defi.users(signer);
+      /* 2️⃣ Deposit */
+      await writeContractAsync({
+        address: NOVADEFI_ADDRESS,
+        abi: NOVADEFI_ABI,
+        functionName: "deposit",
+        args: [
+          parsedAmount,
+          referrer || "0x0000000000000000000000000000000000000000",
+        ],
+      });
 
-      setDepositBalance(fromWei(user.depositBalance));
-      setRewardBalance(fromWei(user.rewardBalance));
-      setLevel(Number(user.level));
-      setTeamCount(Number(user.teamCount));
+      alert("✅ Deposit Successful");
+      setAmount("");
+      setReferrer("");
     } catch (err) {
       console.error(err);
+      alert("❌ Deposit Failed");
     }
+
+    setLoading(false);
   }
 
-  useEffect(() => {
-    loadUser();
-  }, []);
+  /* ================= UI ================= */
 
-  /* ============================
-     HANDLE DEPOSIT
-  ============================ */
-  async function handleDeposit() {
-    if (!amount) return alert("Enter amount");
-    if (Number(amount) < 50)
-      return alert("Minimum deposit is 50 USDT");
-
-    try {
-      setLoading(true);
-      await ensureMainnet();
-
-      const usdt = await getUSDTContract();
-      const defi = await getNovaDefiContract();
-
-      const parsedAmount = toWei(amount);
-      const signer = await usdt.signer.getAddress();
-
-      const allowance = await usdt.allowance(
-        signer,
-        NOVADEFI_ADDRESS
-      );
-
-      if (allowance.lt(parsedAmount)) {
-        const approveTx = await usdt.approve(
-          NOVADEFI_ADDRESS,
-          parsedAmount
-        );
-        await approveTx.wait();
-      }
-
-      const depositTx = await defi.deposit(
-        parsedAmount,
-        referrer
-      );
-
-      await depositTx.wait();
-
-      alert("Deposit Successful 🚀");
-      setAmount("");
-      loadUser();
-    } catch (err: any) {
-      console.error(err);
-      alert(err?.reason || err?.error?.message || "Deposit Failed ❌");
-    } finally {
-      setLoading(false);
-    }
+  if (!isConnected) {
+    return (
+      <div className="bg-white/5 p-6 rounded-2xl border border-white/10">
+        Please connect your wallet.
+      </div>
+    );
   }
 
   return (
-    <div className="p-6 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 shadow-lg mt-6 text-white">
+    <div className="bg-white/5 p-6 rounded-2xl border border-white/10 space-y-4">
+      <h3 className="text-xl font-bold text-green-400">
+        Deposit USDT
+      </h3>
 
-      <h2 className="text-xl font-semibold mb-4">
-        VIP Deposit Panel
-      </h2>
-
-      {/* USER STATS */}
-      <div className="grid grid-cols-2 gap-3 mb-6 text-sm">
-        <div className="bg-black/30 p-3 rounded-lg">
-          Deposit: {depositBalance} USDT
-        </div>
-        <div className="bg-black/30 p-3 rounded-lg">
-          Rewards: {rewardBalance} USDT
-        </div>
-        <div className="bg-black/30 p-3 rounded-lg">
-          Level: {level}
-        </div>
-        <div className="bg-black/30 p-3 rounded-lg">
-          Team: {teamCount}
-        </div>
-      </div>
-
-      {/* INPUT */}
       <input
         type="number"
-        placeholder="Enter amount (Min 50 USDT)"
+        placeholder="Enter Amount"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
-        className="w-full p-3 rounded-lg bg-black/40 border border-white/20 mb-4 focus:outline-none focus:ring-2 focus:ring-green-500"
+        className="w-full p-3 rounded-xl bg-black/40 border border-white/10"
+      />
+
+      <input
+        type="text"
+        placeholder="Referrer (optional)"
+        value={referrer}
+        onChange={(e) => setReferrer(e.target.value)}
+        className="w-full p-3 rounded-xl bg-black/40 border border-white/10"
       />
 
       <button
         onClick={handleDeposit}
         disabled={loading}
-        className="w-full py-3 rounded-lg bg-gradient-to-r from-green-400 to-blue-500 font-semibold hover:opacity-90 transition"
+        className="w-full py-3 rounded-xl bg-gradient-to-r from-green-400 to-blue-500 text-black font-semibold"
       >
-        {loading ? "Processing..." : "Approve & Deposit"}
+        {loading
+          ? "Processing..."
+          : needsApproval
+          ? "Approve + Deposit"
+          : "Deposit"}
       </button>
-
-      {referrer !==
-        "0x0000000000000000000000000000000000000000" && (
-        <p className="text-xs text-gray-400 mt-3">
-          Referral: {referrer.slice(0, 6)}...
-          {referrer.slice(-4)}
-        </p>
-      )}
     </div>
   );
 }

@@ -1,57 +1,123 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { ethers } from "ethers";
-import { getNovaDefiContract, getProvider } from "@/lib/web3";
+import { useAccount, useReadContract } from "wagmi";
+import { formatUnits } from "viem";
+import { NOVADEFI_ADDRESS, NOVADEFI_ABI } from "@/lib/web3";
 
 export default function StatsGrid() {
-  const [data, setData] = useState<any>(null);
+  const { address, isConnected, chain } = useAccount();
 
-  useEffect(() => {
-    async function load() {
-      try {
-        const provider = await getProvider();
-        const signer = provider.getSigner();
-        const address = await signer.getAddress();
+  /* ================= NETWORK CHECK ================= */
 
-        const contract = await getNovaDefiContract();
-        const user = await contract.users(address);
+  if (chain?.id !== 56) {
+    return (
+      <GridWrapper>
+        <StatCard title="Network Error" value="Switch to BSC Mainnet" />
+        <StatCard title="Reward Balance" value="-" />
+        <StatCard title="Team Size" value="-" />
+      </GridWrapper>
+    );
+  }
 
-        setData({
-          deposit: ethers.utils.formatUnits(user.depositBalance, 18),
-          rewards: ethers.utils.formatUnits(user.rewardBalance, 18),
-          level: Number(user.level),
-          direct: Number(user.directCount),
-          team: Number(user.teamCount),
-          monthly: ethers.utils.formatUnits(user.monthlyWithdrawn, 18),
-        });
-      } catch (err) {
-        console.log("Wallet not connected");
-      }
-    }
+  /* ================= CONTRACT READ ================= */
 
-    load();
-  }, []);
+  const { data, isLoading, isError } = useReadContract({
+  address: NOVADEFI_ADDRESS,
+  abi: NOVADEFI_ABI,
+  functionName: "users",
+  args: address ? [address] : undefined,
+  chainId: 56,
+  query: {
+    enabled: !!address, // ✅ call only when address exists
+    refetchInterval: 10000,
+  },
+});
 
-  if (!data) return null;
+  /* ================= NOT CONNECTED ================= */
+
+  if (!isConnected) {
+    return (
+      <GridWrapper>
+        <StatCard title="Deposit Balance" value="Connect Wallet" />
+        <StatCard title="Reward Balance" value="Connect Wallet" />
+        <StatCard title="Team Size" value="Connect Wallet" />
+      </GridWrapper>
+    );
+  }
+
+  /* ================= ERROR ================= */
+
+  if (isError) {
+    return (
+      <GridWrapper>
+        <StatCard title="Error" value="Contract read failed" />
+        <StatCard title="-" value="-" />
+        <StatCard title="-" value="-" />
+      </GridWrapper>
+    );
+  }
+
+  /* ================= LOADING ================= */
+
+  if (isLoading || !data) {
+    return (
+      <GridWrapper>
+        <StatCard title="Deposit Balance" value="Loading..." />
+        <StatCard title="Reward Balance" value="Loading..." />
+        <StatCard title="Team Size" value="Loading..." />
+      </GridWrapper>
+    );
+  }
+
+  /* ================= SAFE CAST ================= */
+
+  const user = data as readonly [
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    bigint,
+    number,
+    `0x${string}`,
+    bigint,
+    bigint,
+    number
+  ];
+
+  const deposit = formatUnits(user[0], 18);
+  const reward = formatUnits(user[1], 18);
+  const team = user[10].toString();
 
   return (
-    <div className="grid md:grid-cols-3 gap-6 mb-8">
-      <Card title="Deposit Balance" value={data.deposit + " USDT"} />
-      <Card title="Reward Balance" value={data.rewards + " USDT"} />
-      <Card title="Level" value={"Level " + data.level} />
-      <Card title="Direct Team" value={data.direct.toString()} />
-      <Card title="Total Team" value={data.team.toString()} />
-      <Card title="Monthly Withdrawn" value={data.monthly + " USDT"} />
-    </div>
+    <GridWrapper>
+      <StatCard title="Deposit Balance" value={`${deposit} USDT`} />
+      <StatCard title="Reward Balance" value={`${reward} USDT`} />
+      <StatCard title="Team Size" value={team} />
+    </GridWrapper>
   );
 }
 
-function Card({ title, value }: { title: string; value: string }) {
+/* ================= WRAPPER ================= */
+
+function GridWrapper({ children }: { children: React.ReactNode }) {
+  return <div className="grid md:grid-cols-3 gap-6">{children}</div>;
+}
+
+/* ================= CARD ================= */
+
+function StatCard({
+  title,
+  value,
+}: {
+  title: string;
+  value: string;
+}) {
   return (
-    <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 rounded-2xl shadow-lg">
-      <h3 className="text-sm text-gray-400 mb-2">{title}</h3>
-      <p className="text-xl font-bold text-green-400">{value}</p>
+    <div className="p-6 bg-white/10 backdrop-blur-xl rounded-2xl border border-white/20 shadow-lg hover:scale-105 transition">
+      <h3 className="text-gray-400 text-sm mb-2">{title}</h3>
+      <p className="text-2xl font-bold text-green-400">{value}</p>
     </div>
   );
 }
