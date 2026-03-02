@@ -1,61 +1,50 @@
 "use client";
 
-import { usePathname, useRouter } from "next/navigation";
-import { FaHome, FaUsers, FaGem, FaCrown, FaCog } from "react-icons/fa";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Home, Wallet, Users, Lock } from "lucide-react";
 
 export default function BottomNav() {
-  const pathname = usePathname();
   const router = useRouter();
+  const params = useSearchParams();
+  const tab = params.get("tab");
 
-  const navItems = [
-    { icon: <FaHome />, path: "/" },
-    { icon: <FaUsers />, path: "/team" },
-    { icon: <FaGem />, path: "/nft" },
-    { icon: <FaCrown />, path: "/vip" },
-    { icon: <FaCog />, path: "/settings" },
-  ];
+  function goTo(tabName: string | null) {
+    if (!tabName) {
+      router.push("/dashboard");
+    } else {
+      router.push(`/dashboard?tab=${tabName}`);
+    }
+  }
+
+  function itemStyle(active: boolean) {
+    return `flex flex-col items-center text-xs ${
+      active ? "text-green-400" : "text-gray-400"
+    }`;
+  }
 
   return (
-    <div style={styles.bottomNav}>
-      {navItems.map((item, index) => {
-        const active = pathname === item.path;
-        return (
-          <div
-            key={index}
-            onClick={() => router.push(item.path)}
-            style={{
-              ...styles.navItem,
-              color: active ? "#38bdf8" : "#94a3b8",
-              transform: active ? "scale(1.2)" : "scale(1)",
-            }}
-          >
-            {item.icon}
-          </div>
-        );
-      })}
+    <div className="fixed bottom-0 left-0 w-full bg-black/90 backdrop-blur-xl border-t border-white/10 flex justify-around py-3 md:hidden z-50">
+
+      <button onClick={() => goTo(null)} className={itemStyle(!tab)}>
+        <Home size={20} />
+        Dashboard
+      </button>
+
+      <button onClick={() => goTo("deposit")} className={itemStyle(tab === "deposit")}>
+        <Wallet size={20} />
+        Deposit
+      </button>
+
+      <button onClick={() => goTo("team")} className={itemStyle(tab === "team")}>
+        <Users size={20} />
+        Team
+      </button>
+
+      <button onClick={() => goTo("staking")} className={itemStyle(tab === "staking")}>
+        <Lock size={20} />
+        Staking
+      </button>
+
     </div>
   );
 }
-
-const styles: any = {
-  bottomNav: {
-    position: "fixed",
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: 70,
-    background: "#0f172a",
-    display: "flex",
-    justifyContent: "space-around",
-    alignItems: "center",
-    borderTop: "1px solid #1e293b",
-    backdropFilter: "blur(12px)",
-    zIndex: 999,
-  },
-
-  navItem: {
-    fontSize: 22,
-    cursor: "pointer",
-    transition: "all 0.3s ease",
-  },
-};

@@ -1,99 +1,57 @@
 "use client";
 
-import { useAccount, useReadContract } from "wagmi";
-import { formatUnits } from "viem";
-import { NOVADEFI_ADDRESS } from "@/lib/contract";
-import { novadefiAbi } from "@/lib/novadefiAbi";
+import { useEffect, useState } from "react";
+import { ethers } from "ethers";
+import { getNovaDefiContract, getProvider } from "@/lib/web3";
 
 export default function StatsGrid() {
-  const { address } = useAccount();
+  const [data, setData] = useState<any>(null);
 
-  // USER STRUCT
-  const { data: userData } = useReadContract({
-    address: NOVADEFI_ADDRESS,
-    abi: novadefiAbi,
-    functionName: "users",
-    args: address ? [address] : undefined,
-  });
+  useEffect(() => {
+    async function load() {
+      try {
+        const provider = await getProvider();
+        const signer = provider.getSigner();
+        const address = await signer.getAddress();
 
-  // PENDING REWARDS
-  const { data: rewardsData } = useReadContract({
-    address: NOVADEFI_ADDRESS,
-    abi: novadefiAbi,
-    functionName: "getPendingRewards",
-    args: address ? [address] : undefined,
-  });
+        const contract = await getNovaDefiContract();
+        const user = await contract.users(address);
 
-  // TOTAL INVESTED
-  const { data: totalData } = useReadContract({
-    address: NOVADEFI_ADDRESS,
-    abi: novadefiAbi,
-    functionName: "totalInvested",
-  });
+        setData({
+          deposit: ethers.utils.formatUnits(user.depositBalance, 18),
+          rewards: ethers.utils.formatUnits(user.rewardBalance, 18),
+          level: Number(user.level),
+          direct: Number(user.directCount),
+          team: Number(user.teamCount),
+          monthly: ethers.utils.formatUnits(user.monthlyWithdrawn, 18),
+        });
+      } catch (err) {
+        console.log("Wallet not connected");
+      }
+    }
 
-  // TREASURY
-  const { data: treasuryData } = useReadContract({
-    address: NOVADEFI_ADDRESS,
-    abi: novadefiAbi,
-    functionName: "treasury",
-  });
+    load();
+  }, []);
 
-  // 🔥 SAFE TYPE CASTING
-  const user = userData as any;
-  const rewards = rewardsData as bigint | undefined;
-  const total = totalData as bigint | undefined;
-  const treasury = treasuryData as string | undefined;
-
-  const deposit = user?.depositAmt
-    ? formatUnits(user.depositAmt as bigint, 18)
-    : "0";
-
-  const pending = rewards
-    ? formatUnits(rewards, 18)
-    : "0";
-
-  const totalInvested = total
-    ? formatUnits(total, 18)
-    : "0";
-
-  const level = user?.level ?? 0;
+  if (!data) return null;
 
   return (
-    <div className="grid md:grid-cols-5 gap-6">
+    <div className="grid md:grid-cols-3 gap-6 mb-8">
+      <Card title="Deposit Balance" value={data.deposit + " USDT"} />
+      <Card title="Reward Balance" value={data.rewards + " USDT"} />
+      <Card title="Level" value={"Level " + data.level} />
+      <Card title="Direct Team" value={data.direct.toString()} />
+      <Card title="Total Team" value={data.team.toString()} />
+      <Card title="Monthly Withdrawn" value={data.monthly + " USDT"} />
+    </div>
+  );
+}
 
-      <div className="p-6 bg-white/10 rounded-xl">
-        <p className="text-sm text-gray-400">Your Deposit</p>
-        <h2 className="text-2xl font-bold">{deposit} USDT</h2>
-      </div>
-
-      <div className="p-6 bg-white/10 rounded-xl">
-        <p className="text-sm text-gray-400">Pending Rewards</p>
-        <h2 className="text-2xl font-bold text-green-400">
-          {pending} USDT
-        </h2>
-      </div>
-
-      <div className="p-6 bg-white/10 rounded-xl">
-        <p className="text-sm text-gray-400">Your Level</p>
-        <h2 className="text-2xl font-bold">
-          Level {level}
-        </h2>
-      </div>
-
-      <div className="p-6 bg-white/10 rounded-xl">
-        <p className="text-sm text-gray-400">Total Platform Invested</p>
-        <h2 className="text-2xl font-bold">
-          {totalInvested} USDT
-        </h2>
-      </div>
-
-      <div className="p-6 bg-white/10 rounded-xl">
-        <p className="text-sm text-gray-400">Treasury Address</p>
-        <h2 className="text-xs font-mono break-all">
-          {treasury ?? "Loading..."}
-        </h2>
-      </div>
-
+function Card({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="bg-white/5 backdrop-blur-xl border border-white/10 p-6 rounded-2xl shadow-lg">
+      <h3 className="text-sm text-gray-400 mb-2">{title}</h3>
+      <p className="text-xl font-bold text-green-400">{value}</p>
     </div>
   );
 }
