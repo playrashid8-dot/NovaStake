@@ -7,7 +7,7 @@ import { ethers } from "ethers";
 ================================ */
 
 export const NOVADEFI_ADDRESS =
-  "0x9e2d260C301357883B5dAc9a68b23aC4f05fe6EA";
+  "0x106f19755ca64bF2B6b96BF5A7c78667dC2bf45E";
 
 export const USDT_ADDRESS =
   "0x55d398326f99059fF775485246999027B3197955";
@@ -19,21 +19,73 @@ export const BSC_CHAIN_ID = "0x38"; // 56
 ================================ */
 
 export const NOVADEFI_ABI = [
-  "function deposit(uint256 amount,address referrer)",
-  "function withdraw(uint256 amount)",
-  "function claimSalary()",
-  "function createStake(uint256 amount,uint256 daysPeriod)",
-  "function claimStake(uint256 index)",
-  "function updateReward(address userAddr)",
-  "function updateTreasury(address newWallet)",
-  "function treasury() view returns(address)",
-  "function owner() view returns(address)",
-  "function MIN_DEPOSIT() view returns(uint256)",
-  "function LOCK_PERIOD() view returns(uint256)",
-  "function WITHDRAW_COOLDOWN() view returns(uint256)",
-  "function ADMIN_FEE() view returns(uint256)",
-  "function users(address) view returns(uint256 depositBalance,uint256 stakedBalance,uint256 rewardBalance,uint256 lastUpdate,uint256 depositTime,uint256 lastWithdrawTime,address referrer,uint8 level,uint256 directCount,uint256 teamCount,uint8 salaryStage,uint256 lastSalaryTeam)",
-  "function userStakes(address,uint256) view returns(uint256 amount,uint256 startTime,uint256 endTime,uint256 dailyRate,bool claimed)"
+  {
+    "inputs":[{"internalType":"address","name":"_usdt","type":"address"}],
+    "stateMutability":"nonpayable",
+    "type":"constructor"
+  },
+  {
+    "inputs":[{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"address","name":"referrer","type":"address"}],
+    "name":"deposit",
+    "outputs":[],
+    "stateMutability":"nonpayable",
+    "type":"function"
+  },
+  {
+    "inputs":[{"internalType":"uint256","name":"amount","type":"uint256"}],
+    "name":"requestWithdraw",
+    "outputs":[],
+    "stateMutability":"nonpayable",
+    "type":"function"
+  },
+  {
+    "inputs":[],
+    "name":"claimWithdraw",
+    "outputs":[],
+    "stateMutability":"nonpayable",
+    "type":"function"
+  },
+  {
+    "inputs":[{"internalType":"uint256","name":"amount","type":"uint256"},{"internalType":"uint256","name":"daysPeriod","type":"uint256"}],
+    "name":"createStake",
+    "outputs":[],
+    "stateMutability":"nonpayable",
+    "type":"function"
+  },
+  {
+    "inputs":[{"internalType":"uint256","name":"index","type":"uint256"}],
+    "name":"claimStake",
+    "outputs":[],
+    "stateMutability":"nonpayable",
+    "type":"function"
+  },
+  {
+    "inputs":[],
+    "name":"claimSalary",
+    "outputs":[],
+    "stateMutability":"nonpayable",
+    "type":"function"
+  },
+  {
+    "inputs":[{"internalType":"address","name":"","type":"address"}],
+    "name":"users",
+    "outputs":[
+      {"internalType":"uint256","name":"depositBalance","type":"uint256"},
+      {"internalType":"uint256","name":"rewardBalance","type":"uint256"},
+      {"internalType":"uint256","name":"lastROIUpdate","type":"uint256"},
+      {"internalType":"uint256","name":"lastWithdrawRequest","type":"uint256"},
+      {"internalType":"uint256","name":"pendingWithdraw","type":"uint256"},
+      {"internalType":"uint256","name":"monthlyWithdrawn","type":"uint256"},
+      {"internalType":"uint256","name":"monthStart","type":"uint256"},
+      {"internalType":"uint8","name":"level","type":"uint8"},
+      {"internalType":"address","name":"referrer","type":"address"},
+      {"internalType":"uint256","name":"directCount","type":"uint256"},
+      {"internalType":"uint256","name":"teamCount","type":"uint256"},
+      {"internalType":"uint8","name":"salaryStage","type":"uint8"}
+    ],
+    "stateMutability":"view",
+    "type":"function"
+  }
 ];
 
 /* ================================
