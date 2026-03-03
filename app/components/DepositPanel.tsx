@@ -1,8 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { useAccount, useReadContract, useWriteContract } from "wagmi";
-import { parseUnits } from "viem";
+import { useState } from "react";
+import {
+  useAccount,
+  useReadContract,
+  useWriteContract,
+} from "wagmi";
+import { parseUnits, formatUnits } from "viem";
 import {
   NOVADEFI_ADDRESS,
   NOVADEFI_ABI,
@@ -12,61 +16,89 @@ import {
 
 export default function DepositPanel() {
   const { address, isConnected } = useAccount();
-  const { writeContractAsync } = useWriteContract();
 
   const [amount, setAmount] = useState("");
   const [referrer, setReferrer] = useState("");
   const [loading, setLoading] = useState(false);
 
-  /* ================= SAFE PARSED AMOUNT ================= */
+  const parsedAmount =
+    amount && Number(amount) > 0
+      ? parseUnits(amount, 18)
+      : 0n;
 
-  const parsedAmount = useMemo(() => {
-    if (!amount || isNaN(Number(amount))) return 0n;
-    return parseUnits(amount, 18);
-  }, [amount]);
+  /* ================= MIN DEPOSIT ================= */
 
-  /* ================= READ ALLOWANCE ================= */
+  const { data: minDepositData } = useReadContract({
+    address: NOVADEFI_ADDRESS as `0x${string}`,
+    abi: NOVADEFI_ABI,
+    functionName: "MIN_DEPOSIT",
+  });
 
-  const { data: allowance } = useReadContract({
-    address: USDT_ADDRESS,
+  const minDeposit =
+    typeof minDepositData === "bigint"
+      ? minDepositData
+      : 0n;
+
+  /* ================= ALLOWANCE ================= */
+
+  const { data: allowanceData } = useReadContract({
+    address: USDT_ADDRESS as `0x${string}`,
     abi: ERC20_ABI,
     functionName: "allowance",
     args: address ? [address, NOVADEFI_ADDRESS] : undefined,
-    query: {
-      enabled: !!address,
-    },
+    query: { enabled: !!address },
   });
 
-  //* ================= SAFE ALLOWANCE HANDLING ================= */
+  const currentAllowance =
+    typeof allowanceData === "bigint"
+      ? allowanceData
+      : 0n;
 
-const safeAllowance =
-  typeof allowance === "bigint" ? allowance : BigInt(0);
+  const needsApproval =
+    parsedAmount > 0n &&
+    currentAllowance < parsedAmount;
 
-const needsApproval =
-  parsedAmount > BigInt(0) &&
-  safeAllowance < parsedAmount;
+  /* ================= WRITE ================= */
 
-  /* ================= HANDLE DEPOSIT ================= */
+  const { writeContractAsync } = useWriteContract();
+
+  async function handleApprove() {
+    try {
+      setLoading(true);
+
+      await writeContractAsync({
+        address: USDT_ADDRESS as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: "approve",
+        args: [NOVADEFI_ADDRESS, parsedAmount],
+      });
+
+      alert("Approval successful ✅");
+
+    } catch (err) {
+      console.error(err);
+      alert("Approval failed ❌");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleDeposit() {
-    if (!parsedAmount || parsedAmount <= 0n || !address) return;
-
-    setLoading(true);
+    if (parsedAmount < minDeposit) {
+      alert(
+        `Minimum deposit is ${formatUnits(
+          minDeposit,
+          18
+        )} USDT`
+      );
+      return;
+    }
 
     try {
-      /* 1️⃣ Approve if needed */
-      if (needsApproval) {
-        await writeContractAsync({
-          address: USDT_ADDRESS,
-          abi: ERC20_ABI,
-          functionName: "approve",
-          args: [NOVADEFI_ADDRESS, parsedAmount],
-        });
-      }
+      setLoading(true);
 
-      /* 2️⃣ Deposit */
       await writeContractAsync({
-        address: NOVADEFI_ADDRESS,
+        address: NOVADEFI_ADDRESS as `0x${string}`,
         abi: NOVADEFI_ABI,
         functionName: "deposit",
         args: [
@@ -75,60 +107,71 @@ const needsApproval =
         ],
       });
 
-      alert("✅ Deposit Successful");
+      alert("Deposit successful 🚀");
       setAmount("");
       setReferrer("");
+
     } catch (err) {
       console.error(err);
-      alert("❌ Deposit Failed");
+      alert("Deposit failed ❌");
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   }
 
   /* ================= UI ================= */
 
   if (!isConnected) {
     return (
-      <div className="bg-white/5 p-6 rounded-2xl border border-white/10">
-        Please connect your wallet.
+      <div className="p-6 bg-white/5 rounded-2xl border border-white/10">
+        Please connect wallet
       </div>
     );
   }
 
   return (
-    <div className="bg-white/5 p-6 rounded-2xl border border-white/10 space-y-4">
-      <h3 className="text-xl font-bold text-green-400">
-        Deposit USDT
-      </h3>
+    <div className="p-6 bg-white/5 backdrop-blur-xl rounded-2xl border border-white/10 space-y-4">
 
+      <h2 className="text-xl font-bold text-green-400">
+        Deposit USDT
+      </h2>
+
+      {/* Amount */}
       <input
         type="number"
-        placeholder="Enter Amount"
+        placeholder="Enter amount"
         value={amount}
         onChange={(e) => setAmount(e.target.value)}
-        className="w-full p-3 rounded-xl bg-black/40 border border-white/10"
+        className="w-full p-3 rounded-lg bg-black/40 border border-white/10"
       />
 
+      {/* Referrer */}
       <input
         type="text"
-        placeholder="Referrer (optional)"
+        placeholder="Referrer address (optional)"
         value={referrer}
         onChange={(e) => setReferrer(e.target.value)}
-        className="w-full p-3 rounded-xl bg-black/40 border border-white/10"
+        className="w-full p-3 rounded-lg bg-black/40 border border-white/10"
       />
 
-      <button
-        onClick={handleDeposit}
-        disabled={loading}
-        className="w-full py-3 rounded-xl bg-gradient-to-r from-green-400 to-blue-500 text-black font-semibold"
-      >
-        {loading
-          ? "Processing..."
-          : needsApproval
-          ? "Approve + Deposit"
-          : "Deposit"}
-      </button>
+      {/* Buttons */}
+      {needsApproval ? (
+        <button
+          onClick={handleApprove}
+          disabled={loading}
+          className="w-full py-3 rounded-lg bg-yellow-500 text-black font-semibold hover:opacity-90 transition disabled:opacity-50"
+        >
+          {loading ? "Approving..." : "Approve USDT"}
+        </button>
+      ) : (
+        <button
+          onClick={handleDeposit}
+          disabled={loading}
+          className="w-full py-3 rounded-lg bg-gradient-to-r from-green-400 to-blue-500 text-black font-semibold hover:opacity-90 transition disabled:opacity-50"
+        >
+          {loading ? "Processing..." : "Deposit"}
+        </button>
+      )}
     </div>
   );
 }

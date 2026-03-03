@@ -1,19 +1,18 @@
 "use client";
 
 import "./globals.css";
-
 import { WagmiProvider } from "wagmi";
 import { config } from "@/lib/wallet";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState } from "react";
 import Navbar from "@/app/components/Navbar";
-import { ReactNode, useState } from "react";
+import NetworkGuard from "@/app/components/NetworkGuard";
 
 export default function RootLayout({
   children,
 }: {
-  children: ReactNode;
+  children: React.ReactNode;
 }) {
-  // ✅ Prevent double QueryClient creation
   const [queryClient] = useState(() => new QueryClient());
 
   return (
@@ -23,10 +22,13 @@ export default function RootLayout({
         <WagmiProvider config={config}>
           <QueryClientProvider client={queryClient}>
 
-            {/* 🔥 Global Navbar */}
+            {/* Auto BSC Switch */}
+            <NetworkGuard />
+
+            {/* Global Navbar */}
             <Navbar />
 
-            {/* 🔥 Page Content */}
+            {/* Page Content */}
             {children}
 
           </QueryClientProvider>
