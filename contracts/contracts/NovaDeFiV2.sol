@@ -10,11 +10,11 @@ contract NovaDeFiV2 is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     IERC20 public immutable USDT;
+    address public treasury;
 
     uint256 public constant MIN_DEPOSIT = 50 * 1e18;
     uint256 public constant WITHDRAW_COOLDOWN = 96 hours;
     uint256 public constant ADMIN_FEE = 8;
-
     uint256 public constant MONTH = 30 days;
 
     event Deposited(address indexed user, uint256 amount);
@@ -22,7 +22,6 @@ contract NovaDeFiV2 is Ownable, ReentrancyGuard {
     event Withdrawn(address indexed user, uint256 amount, uint256 fee);
     event Staked(address indexed user, uint256 amount, uint256 daysPeriod);
     event StakeClaimed(address indexed user, uint256 total);
-    event SalaryClaimed(address indexed user, uint256 amount);
 
     struct User {
         uint256 depositBalance;
@@ -39,8 +38,6 @@ contract NovaDeFiV2 is Ownable, ReentrancyGuard {
         address referrer;
         uint256 directCount;
         uint256 teamCount;
-
-        uint8 salaryStage;
     }
 
     struct Stake {
@@ -54,24 +51,40 @@ contract NovaDeFiV2 is Ownable, ReentrancyGuard {
     mapping(address => User) public users;
     mapping(address => Stake[]) public userStakes;
 
-    constructor(address _usdt) Ownable(msg.sender) {
-    USDT = IERC20(_usdt);
-}
+    constructor(address _usdt, address _treasury) Ownable(msg.sender) {
+        USDT = IERC20(_usdt);
+        treasury = _treasury;
+    }
+
+    function setTreasury(address _new) external onlyOwner {
+        treasury = _new;
+    }
+
+    /* ================= TIME HELPER ================= */
+
+    function _currentDay() internal view returns (uint256) {
+        uint256 pktTime = block.timestamp + 5 hours; // PKT
+        return pktTime / 1 days;
+    }
 
     /* ================= DEPOSIT ================= */
 
     function deposit(uint256 amount, address referrer) external nonReentrant {
         require(amount >= MIN_DEPOSIT, "Min 50 USDT");
 
-        USDT.safeTransferFrom(msg.sender, address(this), amount);
-
         User storage user = users[msg.sender];
 
-        if (user.referrer == address(0) && referrer != msg.sender && referrer != address(0)) {
+        if (user.depositBalance == 0) {
+            require(referrer != address(0), "Referrer required");
+            require(referrer != msg.sender, "Self referral not allowed");
+            require(users[referrer].depositBalance > 0, "Invalid referrer");
+
             user.referrer = referrer;
             users[referrer].directCount++;
             _propagateTeam(referrer);
         }
+
+        USDT.safeTransferFrom(msg.sender, address(this), amount);
 
         _updateROI(msg.sender);
 
@@ -90,29 +103,45 @@ contract NovaDeFiV2 is Ownable, ReentrancyGuard {
     /* ================= ROI ================= */
 
     function _getDailyROI(uint8 level) internal pure returns (uint256) {
-        if (level == 3) return 200;
-        if (level == 2) return 150;
-        return 100;
+        if (level == 3) return 200; // 2%
+        if (level == 2) return 150; // 1.5%
+        return 100;                 // 1%
     }
 
     function _updateROI(address userAddr) internal {
         User storage user = users[userAddr];
 
+        uint256 today = _currentDay();
+
         if (user.lastROIUpdate == 0) {
-            user.lastROIUpdate = block.timestamp;
+            user.lastROIUpdate = today;
             return;
         }
 
-        uint256 timePassed = block.timestamp - user.lastROIUpdate;
+        if (today > user.lastROIUpdate) {
+            uint256 daysPassed = today - user.lastROIUpdate;
 
-        if (timePassed >= 1 days && user.depositBalance > 0) {
-            uint256 daysPassed = timePassed / 1 days;
-            uint256 dailyRate = _getDailyROI(user.level);
+            uint256 effectiveBalance = user.depositBalance;
 
-            uint256 reward = (user.depositBalance * dailyRate * daysPassed) / 10000;
+            // Remove pending withdraw from ROI base
+            if (user.pendingWithdraw > 0) {
+                if (effectiveBalance > user.pendingWithdraw) {
+                    effectiveBalance -= user.pendingWithdraw;
+                } else {
+                    effectiveBalance = 0;
+                }
+            }
 
-            user.rewardBalance += reward;
-            user.lastROIUpdate += daysPassed * 1 days;
+            if (effectiveBalance > 0) {
+                uint256 dailyRate = _getDailyROI(user.level);
+
+                uint256 reward =
+                    (effectiveBalance * dailyRate * daysPassed) / 10000;
+
+                user.rewardBalance += reward;
+            }
+
+            user.lastROIUpdate = today;
         }
     }
 
@@ -163,12 +192,29 @@ contract NovaDeFiV2 is Ownable, ReentrancyGuard {
         _updateROI(msg.sender);
 
         uint256 rate;
+        uint256 minAmount;
 
-        if (daysPeriod == 7) rate = 130;
-        else if (daysPeriod == 15) rate = 150;
-        else if (daysPeriod == 30) rate = 180;
-        else if (daysPeriod == 60) rate = 220;
-        else revert("Invalid plan");
+        if (daysPeriod == 7) {
+            rate = 130;
+            minAmount = 100 * 1e18;
+        } 
+        else if (daysPeriod == 15) {
+            rate = 150;
+            minAmount = 300 * 1e18;
+        } 
+        else if (daysPeriod == 30) {
+            rate = 180;
+            minAmount = 500 * 1e18;
+        } 
+        else if (daysPeriod == 60) {
+            rate = 220;
+            minAmount = 1000 * 1e18;
+        } 
+        else {
+            revert("Invalid plan");
+        }
+
+        require(amount >= minAmount, "Below minimum stake");
 
         user.depositBalance -= amount;
 
@@ -201,40 +247,17 @@ contract NovaDeFiV2 is Ownable, ReentrancyGuard {
         emit StakeClaimed(msg.sender, total);
     }
 
-    /* ================= SALARY ================= */
-
-    function claimSalary() external nonReentrant {
-        User storage u = users[msg.sender];
-        uint256 reward;
-
-        if (u.salaryStage == 0 && u.directCount >= 5 && u.teamCount >= 15) {
-            reward = 30e18;
-            u.salaryStage = 1;
-        } else if (u.salaryStage == 1 && u.directCount >= 10 && u.teamCount >= 35) {
-            reward = 80e18;
-            u.salaryStage = 2;
-        } else if (u.salaryStage == 2 && u.directCount >= 25 && u.teamCount >= 100) {
-            reward = 250e18;
-            u.salaryStage = 3;
-        } else if (u.salaryStage == 3 && u.directCount >= 45 && u.teamCount >= 150) {
-            reward = 400e18;
-            u.salaryStage = 4;
-        } else {
-            revert("Not eligible");
-        }
-
-        u.rewardBalance += reward;
-        emit SalaryClaimed(msg.sender, reward);
-    }
-
-    /* ================= WITHDRAW ================= */
+    /* ================= UNIFIED WITHDRAW ================= */
 
     function requestWithdraw(uint256 amount) external {
         User storage user = users[msg.sender];
 
         _updateROI(msg.sender);
 
-        require(user.rewardBalance >= amount, "Insufficient");
+        uint256 totalBalance = user.depositBalance + user.rewardBalance;
+
+        require(amount > 0, "Invalid amount");
+        require(totalBalance >= amount, "Insufficient total balance");
         require(user.pendingWithdraw == 0, "Pending exists");
 
         user.pendingWithdraw = amount;
@@ -254,19 +277,29 @@ contract NovaDeFiV2 is Ownable, ReentrancyGuard {
             user.monthlyWithdrawn = 0;
         }
 
-        uint256 limit = _getMonthlyLimit(user.level);
-        require(user.monthlyWithdrawn + user.pendingWithdraw <= limit, "Monthly limit");
-
         uint256 amount = user.pendingWithdraw;
-        user.pendingWithdraw = 0;
+        uint256 limit = _getMonthlyLimit(user.level);
 
-        user.rewardBalance -= amount;
+        require(user.monthlyWithdrawn + amount <= limit, "Monthly limit");
+
+        uint256 totalBalance = user.depositBalance + user.rewardBalance;
+        require(totalBalance >= amount, "Balance changed");
+
+        if (user.rewardBalance >= amount) {
+            user.rewardBalance -= amount;
+        } else {
+            uint256 remaining = amount - user.rewardBalance;
+            user.rewardBalance = 0;
+            user.depositBalance -= remaining;
+        }
+
+        user.pendingWithdraw = 0;
         user.monthlyWithdrawn += amount;
 
         uint256 fee = (amount * ADMIN_FEE) / 100;
         uint256 net = amount - fee;
 
-        USDT.safeTransfer(owner(), fee);
+        USDT.safeTransfer(treasury, fee);
         USDT.safeTransfer(msg.sender, net);
 
         emit Withdrawn(msg.sender, net, fee);

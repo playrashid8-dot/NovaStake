@@ -7,6 +7,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
 import Navbar from "@/app/components/Navbar";
 import NetworkGuard from "@/app/components/NetworkGuard";
+import TransactionModal from "./components/TransactionModal";
 
 export default function RootLayout({
   children,
@@ -20,19 +21,15 @@ export default function RootLayout({
       <body className="bg-gradient-to-br from-[#0f0c29] via-[#1a1a3c] to-[#24243e] text-white min-h-screen">
 
         <WagmiProvider config={config}>
-          <QueryClientProvider client={queryClient}>
+  <QueryClientProvider client={queryClient}>
+    <NetworkGuard />
+    <Navbar />
 
-            {/* Auto BSC Switch */}
-            <NetworkGuard />
+    <TransactionModal />   {/* 👈 YAHAN */}
 
-            {/* Global Navbar */}
-            <Navbar />
-
-            {/* Page Content */}
-            {children}
-
-          </QueryClientProvider>
-        </WagmiProvider>
+    {children}
+  </QueryClientProvider>
+</WagmiProvider>
 
       </body>
     </html>
