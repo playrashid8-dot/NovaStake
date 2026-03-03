@@ -1,107 +1,110 @@
 "use client";
 
-import { useSearchParams, useRouter } from "next/navigation";
 import { useAccount } from "wagmi";
-import StatsGrid from "../components/StatsGrid";
+import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+import { useSearchParams } from "next/navigation";
+
 import DepositPanel from "../components/DepositPanel";
 import WithdrawPanel from "../components/WithdrawPanel";
 import TeamSection from "../components/TeamSection";
 import StakingSection from "../components/StakingSection";
+import StatsGrid from "../components/StatsGrid";
 import SalaryPanel from "../components/SalaryPanel";
 
+const PremiumHeader = dynamic(
+  () => import("../components/PremiumHeader"),
+  { ssr: false }
+);
+
 export default function DashboardContent() {
+  const { isConnected } = useAccount();
   const params = useSearchParams();
-  const router = useRouter();
   const tab = params.get("tab");
 
-  const { isConnected } = useAccount();
+  const [mounted, setMounted] = useState(false);
 
-  /* ================= WALLET CHECK ================= */
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
 
   if (!isConnected) {
     return (
-      <div className="flex items-center justify-center h-[70vh] text-gray-400 text-lg">
-        Please connect your wallet to access dashboard.
+      <div className="flex items-center justify-center h-[70vh] text-gray-400">
+        Connect wallet to access NovaDeFi
       </div>
     );
   }
 
-  /* ================= TAB HANDLER ================= */
-
-  const changeTab = (value: string) => {
-    router.push(`/dashboard?tab=${value}`);
-  };
-
-  const activeTabStyle =
-    "px-4 py-2 rounded-xl bg-gradient-to-r from-blue-400 to-cyan-500 text-black font-semibold";
-
-  const normalTabStyle =
-    "px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 transition text-gray-300";
-
-  /* ================= UI ================= */
-
   return (
-    <div className="space-y-10 p-6 pb-24 max-w-7xl mx-auto">
+    <div className="relative min-h-screen bg-gradient-to-br from-black via-gray-900 to-black pb-32">
 
-      {/* TOP STATS */}
-      <StatsGrid />
-
-      {/* SALARY PANEL */}
-      <SalaryPanel />
-
-      {/* TAB NAVIGATION */}
-      <div className="flex flex-wrap gap-3 justify-center md:justify-start">
-
-        <button
-          onClick={() => changeTab("deposit")}
-          className={tab === "deposit" ? activeTabStyle : normalTabStyle}
-        >
-          Deposit / Withdraw
-        </button>
-
-        <button
-          onClick={() => changeTab("staking")}
-          className={tab === "staking" ? activeTabStyle : normalTabStyle}
-        >
-          Staking
-        </button>
-
-        <button
-          onClick={() => changeTab("team")}
-          className={tab === "team" ? activeTabStyle : normalTabStyle}
-        >
-          Team
-        </button>
-
+      {/* 🔥 HERO SECTION */}
+      <div className="px-5 pt-6">
+        <PremiumHeader />
       </div>
 
-      {/* DEFAULT WELCOME PANEL */}
-      {!tab && (
-        <div className="bg-gradient-to-br from-gray-900/70 to-black/70 p-10 rounded-3xl border border-white/10 shadow-xl">
-          <h2 className="text-3xl font-bold mb-4 text-white">
-            NovaDeFi Smart Control Panel 🚀
-          </h2>
-          <p className="text-gray-400 max-w-2xl">
-            Manage deposits, withdrawals, staking rewards, team income,
-            and salary bonuses — all from one powerful dashboard.
-          </p>
-        </div>
-      )}
+      {/* ⚡ QUICK ACTIONS */}
+      <div className="grid grid-cols-4 gap-3 px-5 mt-6">
+        <QuickAction label="Deposit" tab="deposit" color="from-green-400 to-emerald-600" />
+        <QuickAction label="Withdraw" tab="deposit" color="from-blue-400 to-cyan-600" />
+        <QuickAction label="Team" tab="team" color="from-purple-400 to-purple-600" />
+        <QuickAction label="Stake" tab="staking" color="from-yellow-400 to-orange-500" />
+      </div>
 
-      {/* DEPOSIT + WITHDRAW */}
+      {/* 📊 STATS */}
+      <div className="mt-10 px-5">
+        <StatsGrid />
+      </div>
+
+      {/* 💰 SALARY */}
+      <div className="mt-8 px-5">
+        <SalaryPanel />
+      </div>
+
+      {/* 🔄 DYNAMIC CONTENT */}
       {tab === "deposit" && (
-        <div className="grid lg:grid-cols-2 gap-8">
+        <div className="mt-10 px-5 space-y-6">
           <DepositPanel />
           <WithdrawPanel />
         </div>
       )}
 
-      {/* STAKING */}
-      {tab === "staking" && <StakingSection />}
+      {tab === "team" && (
+        <div className="mt-10 px-5">
+          <TeamSection />
+        </div>
+      )}
 
-      {/* TEAM */}
-      {tab === "team" && <TeamSection />}
+      {tab === "staking" && (
+        <div className="mt-10 px-5">
+          <StakingSection />
+        </div>
+      )}
 
     </div>
+  );
+}
+
+/* ================= QUICK ACTION ================= */
+
+function QuickAction({
+  label,
+  tab,
+  color,
+}: {
+  label: string;
+  tab: string;
+  color: string;
+}) {
+  return (
+    <a
+      href={`/dashboard?tab=${tab}`}
+      className={`rounded-2xl p-3 text-center text-xs font-bold text-white bg-gradient-to-r ${color} shadow-xl hover:scale-105 transition`}
+    >
+      {label}
+    </a>
   );
 }
