@@ -9,15 +9,10 @@ import {
 import { waitForTransactionReceipt } from "@wagmi/core";
 import { parseUnits, formatUnits } from "viem";
 import { config } from "@/lib/wallet";
-
-import {
-  NOVADEFI_ADDRESS,
-  NOVADEFI_ABI,
-} from "@/lib/web3";
-
+import { NOVADEFI_ADDRESS, NOVADEFI_ABI } from "@/lib/web3";
 import { useTransactionStore } from "@/lib/useTransactionStore";
 
-type UserTuple = readonly [bigint, bigint, bigint];
+const COOLDOWN_SECONDS = 96 * 60 * 60;
 
 export default function WithdrawPanel() {
   const { address, isConnected } = useAccount();
@@ -28,62 +23,51 @@ export default function WithdrawPanel() {
   const [loading, setLoading] = useState(false);
   const [now, setNow] = useState(Date.now());
 
-  /* ================= USER DATA ================= */
+  /* ================= USER STRUCT ================= */
 
-  const { data: userData, refetch } =
-    useReadContract({
-      address: NOVADEFI_ADDRESS,
-      abi: NOVADEFI_ABI,
-      functionName: "users",
-      args: address ? [address] : undefined,
-      query: { enabled: !!address },
-    });
+  const { data: userData, refetch } = useReadContract({
+    address: NOVADEFI_ADDRESS,
+    abi: NOVADEFI_ABI,
+    functionName: "users",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
 
-  const user = userData as UserTuple | undefined;
+  const depositBalance = userData ? (userData as any)[0] : 0n;
+  const rewardBalance = userData ? (userData as any)[1] : 0n;
+  const lastWithdrawRequest = userData ? Number((userData as any)[3]) : 0;
+  const pendingWithdraw = userData ? (userData as any)[4] : 0n;
+  const level = userData ? Number((userData as any)[7]) : 0;
 
-  const available = user?.[0] ?? 0n;
-  const pendingAmount = user?.[1] ?? 0n;
-  const withdrawTime = user?.[2]
-    ? Number(user[2])
-    : 0;
+  const totalAvailable = depositBalance + rewardBalance;
 
-  /* ================= HISTORY ================= */
+  /* ================= MONTHLY LIMIT ================= */
 
-  const { data: historyData } =
-    useReadContract({
-      address: NOVADEFI_ADDRESS,
-      abi: NOVADEFI_ABI,
-      functionName: "getWithdrawHistory",
-      args: address ? [address] : undefined,
-      query: { enabled: !!address },
-    });
+  const getMonthlyLimit = () => {
+    if (level === 3) return 5000n * 10n ** 18n;
+    if (level === 2) return 2000n * 10n ** 18n;
+    return 500n * 10n ** 18n;
+  };
 
-  const history =
-    historyData as
-      | readonly [
-          bigint[],
-          bigint[],
-          number[]
-        ]
-      | undefined;
+  const monthlyLimit = getMonthlyLimit();
 
   /* ================= TIMER ================= */
 
   useEffect(() => {
-    const interval = setInterval(
-      () => setNow(Date.now()),
-      1000
-    );
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
     return () => clearInterval(interval);
   }, []);
 
-  const remaining = Math.max(
-    withdrawTime * 1000 - now,
-    0
-  );
+  const unlockTime = lastWithdrawRequest + COOLDOWN_SECONDS;
+  const remaining =
+    pendingWithdraw > 0n
+      ? Math.max(unlockTime * 1000 - now, 0)
+      : 0;
 
   const canClaim =
-    remaining === 0 && pendingAmount > 0n;
+    pendingWithdraw > 0n && remaining === 0;
 
   const formatTime = () => {
     if (remaining <= 0) return "Ready";
@@ -108,9 +92,16 @@ export default function WithdrawPanel() {
     }
   }, [amount]);
 
+  const adminFee =
+    parsedAmount ? (parsedAmount * 8n) / 100n : 0n;
+
+  const userReceive =
+    parsedAmount ? parsedAmount - adminFee : 0n;
+
   const disableRequest =
     !parsedAmount ||
-    parsedAmount > available ||
+    parsedAmount > totalAvailable ||
+    pendingWithdraw > 0n ||
     loading;
 
   /* ================= REQUEST ================= */
@@ -128,9 +119,7 @@ export default function WithdrawPanel() {
         args: [parsedAmount!],
       });
 
-      await waitForTransactionReceipt(config, {
-        hash,
-      });
+      await waitForTransactionReceipt(config, { hash });
 
       openModal({
         status: "success",
@@ -140,12 +129,10 @@ export default function WithdrawPanel() {
 
       setAmount("");
       await refetch();
-
     } catch (err: any) {
       openModal({
         status: "error",
-        message:
-          err?.shortMessage || "Request Failed",
+        message: err?.shortMessage || "Request Failed",
       });
     } finally {
       setLoading(false);
@@ -164,9 +151,7 @@ export default function WithdrawPanel() {
         functionName: "claimWithdraw",
       });
 
-      await waitForTransactionReceipt(config, {
-        hash,
-      });
+      await waitForTransactionReceipt(config, { hash });
 
       openModal({
         status: "success",
@@ -175,41 +160,15 @@ export default function WithdrawPanel() {
       });
 
       await refetch();
-
     } catch (err: any) {
       openModal({
         status: "error",
-        message:
-          err?.shortMessage || "Claim Failed",
+        message: err?.shortMessage || "Claim Failed",
       });
     } finally {
       setLoading(false);
     }
   }
-
-  /* ================= STATUS BADGE ================= */
-
-  const statusBadge = (status: number) => {
-    if (status === 0)
-      return (
-        <span className="text-yellow-400">
-          Pending
-        </span>
-      );
-    if (status === 1)
-      return (
-        <span className="text-blue-400">
-          Approved
-        </span>
-      );
-    return (
-      <span className="text-green-400">
-        Paid
-      </span>
-    );
-  };
-
-  /* ================= UI ================= */
 
   if (!isConnected)
     return (
@@ -219,18 +178,30 @@ export default function WithdrawPanel() {
     );
 
   return (
-    <div className="p-6 bg-gradient-to-br from-gray-900/80 to-black/80 rounded-2xl border border-white/10 space-y-6">
+    <div className="p-6 bg-gradient-to-br from-gray-900/80 to-black/80 rounded-2xl border border-white/10 space-y-6 shadow-xl">
 
       <h2 className="text-xl font-bold text-blue-400">
         Withdraw System
       </h2>
 
-      <div className="text-sm text-gray-400">
-        Available:{" "}
-        {formatUnits(available, 18)} USDT
+      <div className="space-y-1 text-sm text-gray-400">
+        <div>
+          Deposit Balance: {formatUnits(depositBalance, 18)} USDT
+        </div>
+        <div>
+          Reward Balance: {formatUnits(rewardBalance, 18)} USDT
+        </div>
+        <div className="text-white">
+          Total Available:{" "}
+          {formatUnits(totalAvailable, 18)} USDT
+        </div>
+        <div>
+          Monthly Limit:{" "}
+          {formatUnits(monthlyLimit, 18)} USDT
+        </div>
       </div>
 
-      {/* Request Section */}
+      {/* INPUT */}
 
       <div className="flex gap-2">
         <input
@@ -242,11 +213,10 @@ export default function WithdrawPanel() {
           }
           className="flex-1 p-3 rounded-xl bg-black/50 border border-white/10"
         />
-
         <button
           onClick={() =>
             setAmount(
-              formatUnits(available, 18)
+              formatUnits(totalAvailable, 18)
             )
           }
           className="px-4 bg-gray-700 rounded-xl"
@@ -255,6 +225,19 @@ export default function WithdrawPanel() {
         </button>
       </div>
 
+      {parsedAmount && (
+        <div className="text-xs text-gray-400 space-y-1">
+          <div>
+            Admin Fee (8%):{" "}
+            {formatUnits(adminFee, 18)} USDT
+          </div>
+          <div className="text-green-400">
+            You Receive:{" "}
+            {formatUnits(userReceive, 18)} USDT
+          </div>
+        </div>
+      )}
+
       <button
         onClick={handleRequest}
         disabled={disableRequest}
@@ -262,26 +245,30 @@ export default function WithdrawPanel() {
       >
         {loading
           ? "Processing..."
+          : pendingWithdraw > 0n
+          ? "Pending Exists"
           : "Request Withdraw"}
       </button>
 
-      {/* Pending Section */}
+      {/* PENDING SECTION */}
 
-      {pendingAmount > 0n && (
+      {pendingWithdraw > 0n && (
         <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-xl space-y-2">
-          <div className="flex justify-between">
-            <span>Pending</span>
+          <div className="flex justify-between text-sm">
+            <span>Pending:</span>
             <span>
               {formatUnits(
-                pendingAmount,
+                pendingWithdraw,
                 18
               )}{" "}
               USDT
             </span>
           </div>
+
           <div className="text-xs text-gray-400">
             Claim in: {formatTime()}
           </div>
+
           <button
             onClick={handleClaim}
             disabled={!canClaim || loading}
@@ -291,45 +278,6 @@ export default function WithdrawPanel() {
           </button>
         </div>
       )}
-
-      {/* History Table */}
-
-      <div>
-        <h3 className="text-lg font-semibold text-white mb-3">
-          Withdraw History
-        </h3>
-
-        {!history && (
-          <div className="text-gray-500 text-sm">
-            No history
-          </div>
-        )}
-
-        {history && (
-          <div className="space-y-2">
-            {history[0].map(
-              (amt, index) => (
-                <div
-                  key={index}
-                  className="flex justify-between p-3 bg-white/5 rounded-xl text-sm"
-                >
-                  <span>
-                    {formatUnits(
-                      amt,
-                      18
-                    )}{" "}
-                    USDT
-                  </span>
-                  {statusBadge(
-                    history[2][index]
-                  )}
-                </div>
-              )
-            )}
-          </div>
-        )}
-      </div>
-
     </div>
   );
 }

@@ -7,7 +7,7 @@ import {
   useWriteContract,
 } from "wagmi";
 import { waitForTransactionReceipt } from "@wagmi/core";
-import { parseUnits, formatUnits } from "viem";
+import { parseUnits, formatUnits, isAddress } from "viem";
 import { config } from "@/lib/wallet";
 
 import {
@@ -39,7 +39,24 @@ export default function DepositPanel() {
     }
   }, [amount]);
 
-  /* ================= USER USDT BALANCE ================= */
+  /* ================= USER DATA ================= */
+
+  const { data: userData } = useReadContract({
+    address: NOVADEFI_ADDRESS,
+    abi: NOVADEFI_ABI,
+    functionName: "users",
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  });
+
+  const depositBalance =
+    typeof userData === "object" && userData
+      ? (userData as any)[0] ?? 0n
+      : 0n;
+
+  const isFirstDeposit = depositBalance === 0n;
+
+  /* ================= USDT BALANCE ================= */
 
   const { data: balanceData, refetch: refetchBalance } =
     useReadContract({
@@ -88,7 +105,7 @@ export default function DepositPanel() {
     parsedAmount !== undefined &&
     currentAllowance < parsedAmount;
 
-  /* ================= VALIDATION ================= */
+  /* ================= VALIDATIONS ================= */
 
   const insufficientBalance =
     parsedAmount !== undefined &&
@@ -98,11 +115,19 @@ export default function DepositPanel() {
     parsedAmount !== undefined &&
     parsedAmount < minDeposit;
 
+  const invalidReferrer =
+    isFirstDeposit &&
+    (!referrer ||
+      !isAddress(referrer) ||
+      referrer.toLowerCase() ===
+        address?.toLowerCase());
+
   const disableDeposit =
     !parsedAmount ||
     insufficientBalance ||
     belowMin ||
-    loading;
+    loading ||
+    (isFirstDeposit && invalidReferrer);
 
   /* ================= APPROVE ================= */
 
@@ -119,9 +144,7 @@ export default function DepositPanel() {
         args: [NOVADEFI_ADDRESS, parsedAmount],
       });
 
-      await waitForTransactionReceipt(config, {
-        hash,
-      });
+      await waitForTransactionReceipt(config, { hash });
 
       await refetchAllowance();
 
@@ -153,11 +176,7 @@ export default function DepositPanel() {
         address: NOVADEFI_ADDRESS,
         abi: NOVADEFI_ABI,
         functionName: "deposit",
-        args: [
-          parsedAmount!,
-          referrer ||
-            "0x0000000000000000000000000000000000000000",
-        ],
+        args: [parsedAmount!, referrer],
       });
 
       const receipt = await waitForTransactionReceipt(
@@ -173,7 +192,7 @@ export default function DepositPanel() {
         });
 
         setAmount("");
-        setReferrer("");
+        if (!isFirstDeposit) setReferrer("");
 
         await refetchBalance();
         await refetchAllowance();
@@ -213,8 +232,7 @@ export default function DepositPanel() {
       </h2>
 
       <div className="text-sm text-gray-400">
-        Wallet Balance:{" "}
-        {formatUnits(usdtBalance, 18)} USDT
+        Wallet Balance: {formatUnits(usdtBalance, 18)} USDT
       </div>
 
       <input
@@ -225,18 +243,25 @@ export default function DepositPanel() {
         className="w-full p-3 rounded-xl bg-black/50 border border-white/10 focus:border-green-400 outline-none"
       />
 
-      <input
-        type="text"
-        placeholder="Referrer address (optional)"
-        value={referrer}
-        onChange={(e) => setReferrer(e.target.value)}
-        className="w-full p-3 rounded-xl bg-black/50 border border-white/10"
-      />
+      {isFirstDeposit && (
+        <input
+          type="text"
+          placeholder="Referrer address (required)"
+          value={referrer}
+          onChange={(e) => setReferrer(e.target.value)}
+          className="w-full p-3 rounded-xl bg-black/50 border border-white/10"
+        />
+      )}
 
       <div className="text-xs text-gray-400">
-        Minimum Deposit:{" "}
-        {formatUnits(minDeposit, 18)} USDT
+        Minimum Deposit: {formatUnits(minDeposit, 18)} USDT
       </div>
+
+      {invalidReferrer && (
+        <div className="text-red-400 text-xs">
+          Valid referrer required (not your own address)
+        </div>
+      )}
 
       {insufficientBalance && (
         <div className="text-red-400 text-xs">
