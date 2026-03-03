@@ -8,6 +8,7 @@ import DepositPanel from "../components/DepositPanel";
 import WithdrawPanel from "../components/WithdrawPanel";
 import TeamSection from "../components/TeamSection";
 import StakingSection from "../components/StakingSection";
+import SalaryPanel from "../components/SalaryPanel";
 
 export default function DashboardContent() {
   const params = useSearchParams();
@@ -34,7 +35,9 @@ export default function DashboardContent() {
 
   return (
     <div className="space-y-10 p-6 pb-24">
+      
       <StatsGrid />
+      <SalaryPanel />
 
       {!tab && (
         <div className="bg-white/5 p-8 rounded-2xl border border-white/10">

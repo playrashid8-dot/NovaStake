@@ -1,19 +1,19 @@
+"use client";
+
 import { createConfig, http } from "wagmi";
 import { bsc } from "wagmi/chains";
-import { injected, walletConnect } from "@wagmi/connectors";
+import { injected, walletConnect, coinbaseWallet } from "wagmi/connectors";
 
 export const config = createConfig({
   chains: [bsc],
 
   connectors: [
-    // MetaMask / Browser Wallet
     injected({
       shimDisconnect: true,
     }),
 
-    // WalletConnect (TrustWallet / Mobile / QR)
     walletConnect({
-      projectId: "c4c087b85ab237f175ce8195ee7678d1",
+      projectId: "c4c087b8sab237f175ced190ee7678d1", // your id
       showQrModal: true,
       metadata: {
         name: "NovaDeFi",
@@ -22,11 +22,13 @@ export const config = createConfig({
         icons: ["https://novadefi.app/logo.png"],
       },
     }),
+
+    coinbaseWallet(),
   ],
 
   transports: {
     [bsc.id]: http("https://bsc-dataseed.binance.org"),
   },
 
-  ssr: false, // IMPORTANT for Next 16 hydration fix
+  ssr: false,
 });

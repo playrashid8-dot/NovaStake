@@ -1,7 +1,7 @@
 "use client";
 
 import { useAccount, useDisconnect } from "wagmi";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import WalletModal from "./WalletModal";
 
@@ -9,7 +9,15 @@ export default function Navbar() {
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
   const [modalOpen, setModalOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
   const router = useRouter();
+
+  // 🔥 Hydration Fix
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) return null;
 
   return (
     <>

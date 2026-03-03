@@ -5,6 +5,7 @@ import {
   useAccount,
   useReadContract,
   useWriteContract,
+  useSimulateContract,
 } from "wagmi";
 import { parseUnits, formatUnits } from "viem";
 import {
@@ -16,20 +17,23 @@ import {
 
 export default function DepositPanel() {
   const { address, isConnected } = useAccount();
+  const { writeContractAsync } = useWriteContract();
 
   const [amount, setAmount] = useState("");
   const [referrer, setReferrer] = useState("");
   const [loading, setLoading] = useState(false);
 
+  /* ================= PARSE AMOUNT ================= */
+
   const parsedAmount =
     amount && Number(amount) > 0
       ? parseUnits(amount, 18)
-      : 0n;
+      : undefined;
 
   /* ================= MIN DEPOSIT ================= */
 
   const { data: minDepositData } = useReadContract({
-    address: NOVADEFI_ADDRESS as `0x${string}`,
+    address: NOVADEFI_ADDRESS,
     abi: NOVADEFI_ABI,
     functionName: "MIN_DEPOSIT",
   });
@@ -42,7 +46,7 @@ export default function DepositPanel() {
   /* ================= ALLOWANCE ================= */
 
   const { data: allowanceData } = useReadContract({
-    address: USDT_ADDRESS as `0x${string}`,
+    address: USDT_ADDRESS,
     abi: ERC20_ABI,
     functionName: "allowance",
     args: address ? [address, NOVADEFI_ADDRESS] : undefined,
@@ -55,28 +59,47 @@ export default function DepositPanel() {
       : 0n;
 
   const needsApproval =
-    parsedAmount > 0n &&
+    parsedAmount !== undefined &&
     currentAllowance < parsedAmount;
 
-  /* ================= WRITE ================= */
+  /* ================= GAS ESTIMATION ================= */
 
-  const { writeContractAsync } = useWriteContract();
+  const { data: simulation } = useSimulateContract({
+    address: NOVADEFI_ADDRESS,
+    abi: NOVADEFI_ABI,
+    functionName: "deposit",
+    args:
+      parsedAmount !== undefined
+        ? [
+            parsedAmount,
+            referrer ||
+              "0x0000000000000000000000000000000000000000",
+          ]
+        : undefined,
+    query: {
+      enabled: !!parsedAmount && isConnected,
+    },
+  });
+
+  const estimatedGas = simulation?.request?.gas;
+
+  /* ================= ACTIONS ================= */
 
   async function handleApprove() {
+    if (!parsedAmount) return;
+
     try {
       setLoading(true);
 
       await writeContractAsync({
-        address: USDT_ADDRESS as `0x${string}`,
+        address: USDT_ADDRESS,
         abi: ERC20_ABI,
         functionName: "approve",
         args: [NOVADEFI_ADDRESS, parsedAmount],
       });
 
       alert("Approval successful ✅");
-
     } catch (err) {
-      console.error(err);
       alert("Approval failed ❌");
     } finally {
       setLoading(false);
@@ -84,12 +107,11 @@ export default function DepositPanel() {
   }
 
   async function handleDeposit() {
+    if (!parsedAmount) return;
+
     if (parsedAmount < minDeposit) {
       alert(
-        `Minimum deposit is ${formatUnits(
-          minDeposit,
-          18
-        )} USDT`
+        `Minimum deposit is ${formatUnits(minDeposit, 18)} USDT`
       );
       return;
     }
@@ -98,21 +120,20 @@ export default function DepositPanel() {
       setLoading(true);
 
       await writeContractAsync({
-        address: NOVADEFI_ADDRESS as `0x${string}`,
+        address: NOVADEFI_ADDRESS,
         abi: NOVADEFI_ABI,
         functionName: "deposit",
         args: [
           parsedAmount,
-          referrer || "0x0000000000000000000000000000000000000000",
+          referrer ||
+            "0x0000000000000000000000000000000000000000",
         ],
       });
 
       alert("Deposit successful 🚀");
       setAmount("");
       setReferrer("");
-
     } catch (err) {
-      console.error(err);
       alert("Deposit failed ❌");
     } finally {
       setLoading(false);
@@ -136,7 +157,6 @@ export default function DepositPanel() {
         Deposit USDT
       </h2>
 
-      {/* Amount */}
       <input
         type="number"
         placeholder="Enter amount"
@@ -145,7 +165,6 @@ export default function DepositPanel() {
         className="w-full p-3 rounded-lg bg-black/40 border border-white/10"
       />
 
-      {/* Referrer */}
       <input
         type="text"
         placeholder="Referrer address (optional)"
@@ -154,12 +173,17 @@ export default function DepositPanel() {
         className="w-full p-3 rounded-lg bg-black/40 border border-white/10"
       />
 
-      {/* Buttons */}
+      {estimatedGas && (
+        <div className="text-xs text-gray-400">
+          Estimated Gas: {estimatedGas.toString()}
+        </div>
+      )}
+
       {needsApproval ? (
         <button
           onClick={handleApprove}
           disabled={loading}
-          className="w-full py-3 rounded-lg bg-yellow-500 text-black font-semibold hover:opacity-90 transition disabled:opacity-50"
+          className="w-full py-3 rounded-lg bg-yellow-500 text-black font-semibold"
         >
           {loading ? "Approving..." : "Approve USDT"}
         </button>
@@ -167,7 +191,7 @@ export default function DepositPanel() {
         <button
           onClick={handleDeposit}
           disabled={loading}
-          className="w-full py-3 rounded-lg bg-gradient-to-r from-green-400 to-blue-500 text-black font-semibold hover:opacity-90 transition disabled:opacity-50"
+          className="w-full py-3 rounded-lg bg-gradient-to-r from-green-400 to-blue-500 text-black font-semibold"
         >
           {loading ? "Processing..." : "Deposit"}
         </button>

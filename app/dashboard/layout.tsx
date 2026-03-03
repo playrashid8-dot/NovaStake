@@ -4,7 +4,7 @@ import { ReactNode } from "react";
 import Navbar from "../components/Navbar";
 import Link from "next/link";
 import { LayoutDashboard, Wallet, Users, Trophy } from "lucide-react";
-
+import Providers from "../providers";
 export default function DashboardLayout({
   children,
 }: {
