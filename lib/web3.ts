@@ -5,16 +5,17 @@
 ========================================= */
 
 export const NOVADEFI_ADDRESS =
-  "0xbaDB8E296f5f6d2F646A4260FdE044937F0042B8";
+  "0x9A4F1F12d333375971Da376e51BeAE78D598D825";
 
 export const USDT_ADDRESS =
   "0x55d398326f99059fF775485246999027B3197955";
 
 /* =========================================
-   📜 NOVADEFI ABI (UPDATED V3)
+   📜 NOVADEFI ABI (FULL VERIFIED ABI)
 ========================================= */
 
 export const NOVADEFI_ABI = [
+  // ===== CONSTRUCTOR =====
   {
     inputs: [
       { internalType: "address", name: "_usdt", type: "address" },
@@ -24,6 +25,56 @@ export const NOVADEFI_ABI = [
     type: "constructor"
   },
 
+  // ===== EVENTS =====
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "user", type: "address" },
+      { indexed: false, internalType: "uint256", name: "amount", type: "uint256" }
+    ],
+    name: "Deposited",
+    type: "event"
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "user", type: "address" },
+      { indexed: false, internalType: "uint256", name: "amount", type: "uint256" }
+    ],
+    name: "WithdrawRequested",
+    type: "event"
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "user", type: "address" },
+      { indexed: false, internalType: "uint256", name: "amount", type: "uint256" },
+      { indexed: false, internalType: "uint256", name: "fee", type: "uint256" }
+    ],
+    name: "Withdrawn",
+    type: "event"
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "user", type: "address" },
+      { indexed: false, internalType: "uint256", name: "amount", type: "uint256" },
+      { indexed: false, internalType: "uint256", name: "daysPeriod", type: "uint256" }
+    ],
+    name: "Staked",
+    type: "event"
+  },
+  {
+    anonymous: false,
+    inputs: [
+      { indexed: true, internalType: "address", name: "user", type: "address" },
+      { indexed: false, internalType: "uint256", name: "total", type: "uint256" }
+    ],
+    name: "StakeClaimed",
+    type: "event"
+  },
+
+  // ===== WRITE FUNCTIONS =====
   {
     name: "deposit",
     type: "function",
@@ -34,7 +85,6 @@ export const NOVADEFI_ABI = [
     ],
     outputs: []
   },
-
   {
     name: "requestWithdraw",
     type: "function",
@@ -42,7 +92,6 @@ export const NOVADEFI_ABI = [
     inputs: [{ name: "amount", type: "uint256" }],
     outputs: []
   },
-
   {
     name: "claimWithdraw",
     type: "function",
@@ -50,7 +99,6 @@ export const NOVADEFI_ABI = [
     inputs: [],
     outputs: []
   },
-
   {
     name: "createStake",
     type: "function",
@@ -61,7 +109,6 @@ export const NOVADEFI_ABI = [
     ],
     outputs: []
   },
-
   {
     name: "claimStake",
     type: "function",
@@ -70,6 +117,7 @@ export const NOVADEFI_ABI = [
     outputs: []
   },
 
+  // ===== VIEW FUNCTIONS =====
   {
     name: "users",
     type: "function",
@@ -89,7 +137,6 @@ export const NOVADEFI_ABI = [
       { name: "teamCount", type: "uint256" }
     ]
   },
-
   {
     name: "ADMIN_FEE",
     type: "function",
@@ -97,7 +144,6 @@ export const NOVADEFI_ABI = [
     inputs: [],
     outputs: [{ type: "uint256" }]
   },
-
   {
     name: "MIN_DEPOSIT",
     type: "function",
@@ -105,13 +151,19 @@ export const NOVADEFI_ABI = [
     inputs: [],
     outputs: [{ type: "uint256" }]
   },
-
   {
     name: "WITHDRAW_COOLDOWN",
     type: "function",
     stateMutability: "view",
     inputs: [],
     outputs: [{ type: "uint256" }]
+  },
+  {
+    name: "treasury",
+    type: "function",
+    stateMutability: "view",
+    inputs: [],
+    outputs: [{ type: "address" }]
   }
 ];
 

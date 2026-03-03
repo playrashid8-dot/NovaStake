@@ -75,14 +75,15 @@ contract NovaDeFiV2 is Ownable, ReentrancyGuard {
         User storage user = users[msg.sender];
 
         if (user.depositBalance == 0) {
-            require(referrer != address(0), "Referrer required");
-            require(referrer != msg.sender, "Self referral not allowed");
-            require(users[referrer].depositBalance > 0, "Invalid referrer");
+    if (referrer != address(0)) {
+        require(referrer != msg.sender, "Self referral not allowed");
+        require(users[referrer].depositBalance > 0, "Invalid referrer");
 
-            user.referrer = referrer;
-            users[referrer].directCount++;
-            _propagateTeam(referrer);
-        }
+        user.referrer = referrer;
+        users[referrer].directCount++;
+        _propagateTeam(referrer);
+    }
+}
 
         USDT.safeTransferFrom(msg.sender, address(this), amount);
 
