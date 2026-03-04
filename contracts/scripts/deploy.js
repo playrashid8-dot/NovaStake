@@ -2,13 +2,13 @@ const hre = require("hardhat");
 
 async function main() {
   const USDT = "0x55d398326f99059fF775485246999027B3197955"; // BSC USDT
-  const TREASURY = "0xaAbCCBEF90Fd8A6d03Dd3A37F466Ca6F4Fa55872";
+  const TREASURY = "0xeA94332704ecA08CABDF0447312FE7640F0E28d7";
 
-  const Nova = await hre.ethers.deployContract("NovaDeFiV2", [USDT, TREASURY]);
+  const Nova = await hre.ethers.deployContract("NovaDeFi", [USDT, TREASURY]);
 
   await Nova.waitForDeployment();
 
-  console.log("NovaDeFiV2 deployed to:", await Nova.getAddress());
+  console.log("NovaDeFi deployed to:", await Nova.getAddress());
 }
 
 main().catch((error) => {
