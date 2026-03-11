@@ -1,12 +1,13 @@
-// next.config.ts
-import type { NextConfig } from "next";
-import path from "path";
+/** @type {import('next').NextConfig} */
 
-const nextConfig: NextConfig = {
-  turbopack: {
-    // ✅ Force turbopack root to this project
-    root: path.join(__dirname),
+const nextConfig = {
+  reactStrictMode: true,
+
+  experimental: {
+    turbo: {
+      root: __dirname,
+    },
   },
 };
 
-export default nextConfig;
+module.exports = nextConfig;
