@@ -13,7 +13,7 @@ export const config = createConfig({
     }),
 
     walletConnect({
-      projectId: "c4c087b8sab237f175ced190ee7678d1", // your id
+      projectId: "c4c087b85ab237f175ce8195ee7678d1",
       showQrModal: true,
       metadata: {
         name: "NovaDeFi",
@@ -23,7 +23,9 @@ export const config = createConfig({
       },
     }),
 
-    coinbaseWallet(),
+    coinbaseWallet({
+      appName: "NovaDeFi",
+    }),
   ],
 
   transports: {

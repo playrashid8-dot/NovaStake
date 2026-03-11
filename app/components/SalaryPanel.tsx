@@ -1,44 +1,101 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useAccount, useWriteContract } from "wagmi";
-import { formatUnits } from "viem";
+import { waitForTransactionReceipt } from "@wagmi/core";
 
+import { config } from "@/lib/wallet";
 import {
-  NOVADEFI_ADDRESS,
-  NOVADEFI_ABI,
-} from "@/lib/web3";
-
+  NOVASTAKE_ADDRESS,
+  NOVASTAKE_ABI,
+  SALARY_STAGE_META,
+} from "@/lib/contract";
 import { useTransactionStore } from "@/lib/useTransactionStore";
+import { useToastStore } from "@/lib/useToastStore";
+import { useNovaUser } from "@/lib/hooks/useNovaUser";
+import { pushDashboardHistory } from "@/lib/dashboardHistory";
+
+function cn(...a: (string | false | undefined)[]) {
+  return a.filter(Boolean).join(" ");
+}
+
+function formatToken(value?: bigint | number | null, decimals = 18, max = 2) {
+  if (value == null) return "0";
+  const num =
+    typeof value === "bigint" ? Number(value) / 10 ** decimals : Number(value);
+
+  if (!Number.isFinite(num)) return "0";
+
+  return num.toLocaleString(undefined, {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: max,
+  });
+}
 
 export default function SalaryPanel() {
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
-  const { openModal } = useTransactionStore();
 
+  const { openModal } = useTransactionStore();
+  const openToast = useToastStore((s) => s.openToast);
+
+  const user = useNovaUser();
   const [loading, setLoading] = useState(false);
 
-  async function handleClaim() {
+  const currentStage = Math.max(0, Number(user.salaryStageClaimed ?? 0));
+  const completedAll = currentStage >= SALARY_STAGE_META.length;
+
+  const nextStage = useMemo(() => {
+    if (completedAll) return null;
+    return SALARY_STAGE_META[currentStage] ?? null;
+  }, [completedAll, currentStage]);
+
+  async function claimSalary() {
+    if (!address || loading || !user.canClaimSalary) return;
+
     try {
       setLoading(true);
 
       const hash = await writeContractAsync({
-        address: NOVADEFI_ADDRESS,
-        abi: NOVADEFI_ABI,
+        address: NOVASTAKE_ADDRESS,
+        abi: NOVASTAKE_ABI,
         functionName: "claimSalary",
       });
 
       openModal({
-        status: "success",
-        message: "Salary Claimed Successfully 💰",
+        status: "pending",
+        message: "Claiming salary reward...",
         hash,
       });
 
+      await waitForTransactionReceipt(config, { hash });
+      await user.refetchAll?.();
+
+      pushDashboardHistory(address, {
+        type: "salary",
+        title: "Salary Claimed",
+        subtitle: new Date().toLocaleString(),
+        amount: `Stage ${currentStage + 1}`,
+        amountClass: "text-pink-300",
+        badge: "Salary",
+        badgeClass: "bg-pink-500/15 text-pink-200",
+        ts: Math.floor(Date.now() / 1000),
+      });
+
+      openModal({
+        status: "success",
+        message: "Salary claimed successfully ✅",
+        hash,
+      });
+
+      openToast("Salary claimed ✅", "success");
     } catch (err: any) {
       openModal({
         status: "error",
-        message: err?.shortMessage || "Claim Failed",
+        message: err?.shortMessage || err?.message || "Claim failed",
       });
+
+      openToast(err?.shortMessage || err?.message || "Claim failed", "error");
     } finally {
       setLoading(false);
     }
@@ -46,30 +103,147 @@ export default function SalaryPanel() {
 
   if (!isConnected) {
     return (
-      <div className="p-6 bg-white/5 rounded-2xl border border-white/10 text-center">
-        Connect wallet to claim salary
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-white/80">
+        Connect wallet to view salary rewards
       </div>
     );
   }
 
   return (
-    <div className="p-6 bg-gradient-to-br from-gray-900/80 to-black/80 backdrop-blur-xl rounded-2xl border border-white/10 space-y-5 shadow-xl">
+    <div className="mx-auto w-full max-w-4xl space-y-4">
+      <div className="rounded-3xl border border-white/10 bg-white/5 p-4 md:p-5">
+        <h2 className="text-xl font-extrabold text-pink-300">Salary Rewards</h2>
+        <p className="mt-1 text-sm text-white/55">
+          Unlock salary rewards through direct referrals, team growth, and team volume.
+        </p>
 
-      <h2 className="text-xl font-bold text-pink-400">
-        Weekly Salary System
-      </h2>
-
-      <div className="text-sm text-gray-400">
-        Claim your weekly rewards based on your team performance.
+        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+          <MiniBox title="Direct" value={String(user.directCount ?? 0n)} />
+          <MiniBox title="Team" value={String(user.teamCount ?? 0n)} />
+          <MiniBox
+            title="Volume"
+            value={`${formatToken(user.teamVolume)} NOVA`}
+          />
+          <MiniBox
+            title="Active Stake"
+            value={`${formatToken(user.activePrincipal)} NOVA`}
+          />
+        </div>
       </div>
 
-      <button
-        onClick={handleClaim}
-        disabled={loading}
-        className="w-full py-3 rounded-xl bg-gradient-to-r from-pink-500 to-purple-500 text-white font-semibold hover:opacity-90 transition disabled:opacity-50"
-      >
-        {loading ? "Processing..." : "Claim Salary"}
-      </button>
+      {!completedAll && nextStage ? (
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 md:p-5">
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-sm text-white/60">Next Salary Stage</div>
+              <div className="text-xl font-bold text-white">
+                Stage {nextStage.stage}
+              </div>
+            </div>
+
+            <div className="text-left md:text-right">
+              <div className="text-sm text-white/60">Reward</div>
+              <div className="text-xl font-bold text-green-300">
+                {nextStage.reward} NOVA
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            <ProgressBox
+              title="Direct Required"
+              current={Number(user.directCount ?? 0n)}
+              target={nextStage.direct}
+            />
+            <ProgressBox
+              title="Team Required"
+              current={Number(user.teamCount ?? 0n)}
+              target={nextStage.team}
+            />
+            <ProgressBox
+              title="Volume Required"
+              current={Number(formatToken(user.teamVolume, 18, 2).replace(/,/g, ""))}
+              target={nextStage.volume}
+              suffix=" NOVA"
+            />
+          </div>
+
+          <button
+            type="button"
+            onClick={claimSalary}
+            disabled={!user.canClaimSalary || loading}
+            className={cn(
+              "mt-5 w-full rounded-xl py-3 font-bold transition",
+              user.canClaimSalary
+                ? "bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:opacity-95"
+                : "cursor-not-allowed bg-white/10 text-white/50"
+            )}
+          >
+            {loading ? "Claiming..." : user.canClaimSalary ? "Claim Salary" : "Requirements Not Met"}
+          </button>
+        </div>
+      ) : (
+        <div className="rounded-3xl border border-green-500/20 bg-green-500/5 p-6 text-center">
+          <div className="text-xl font-bold text-white">
+            All Salary Stages Completed
+          </div>
+          <p className="mt-2 text-sm text-white/55">
+            You have already claimed all available salary rewards.
+          </p>
+        </div>
+      )}
+
+      <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-xs text-white/45">
+        <div>• Salary unlock depends on direct, team, and team volume growth.</div>
+        <div className="mt-1">• Salary reward goes to reward balance.</div>
+        <div className="mt-1">• Reward unit is NOVA.</div>
+      </div>
+    </div>
+  );
+}
+
+function MiniBox({
+  title,
+  value,
+}: {
+  title: string;
+  value: string;
+}) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+      <div className="text-xs text-white/45">{title}</div>
+      <div className="mt-1 text-base font-bold text-white">{value}</div>
+    </div>
+  );
+}
+
+function ProgressBox({
+  title,
+  current,
+  target,
+  suffix = "",
+}: {
+  title: string;
+  current: number;
+  target: number;
+  suffix?: string;
+}) {
+  const percent = target > 0 ? Math.min((current / target) * 100, 100) : 0;
+
+  return (
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
+      <div className="text-xs text-white/45">{title}</div>
+      <div className="mt-1 text-sm font-semibold text-white">
+        {current.toLocaleString()} / {target.toLocaleString()}
+        {suffix}
+      </div>
+
+      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
+        <div
+          className="h-full rounded-full bg-gradient-to-r from-pink-500 to-purple-500"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
     </div>
   );
 }

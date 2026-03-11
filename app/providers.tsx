@@ -1,23 +1,24 @@
 "use client";
 
 import { WagmiProvider } from "wagmi";
-import { config } from "@/lib/wallet";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useState } from "react";
-import NetworkGuard from "./components/NetworkGuard";
-import GlobalLoader from "./components/GlobalLoader";
-import ToastSystem from "./components/ToastSystem";
 
-export default function Providers({ children }: any) {
+import { config } from "@/lib/wallet";
+
+import HydrationProvider from "@/app/components/HydrationProvider";
+import TransactionModal from "@/app/components/TransactionModal";
+
+export default function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
 
   return (
     <WagmiProvider config={config}>
       <QueryClientProvider client={queryClient}>
-        <NetworkGuard />
-        <GlobalLoader />
-        <ToastSystem />
-        {children}
+        <HydrationProvider>
+          <TransactionModal />
+          {children}
+        </HydrationProvider>
       </QueryClientProvider>
     </WagmiProvider>
   );

@@ -1,254 +1,103 @@
 "use client";
 
-import { useAccount } from "wagmi";
-import { useEffect, useState } from "react";
-import dynamic from "next/dynamic";
+import { useEffect, useMemo } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 
-import DepositPanel from "../components/DepositPanel";
-import WithdrawPanel from "../components/WithdrawPanel";
-import TeamSection from "../components/TeamSection";
-import StakingSection from "../components/StakingSection";
-import StatsGrid from "../components/StatsGrid";
-import SalaryPanel from "../components/SalaryPanel";
+import StakePanel from "@/app/components/StakePanel";
+import RewardsPanel from "@/app/components/RewardsPanel";
+import TeamSection from "@/app/components/TeamSection";
+import StakingSection from "@/app/components/StakingSection";
+import ReferralBox from "@/app/components/ReferralBox";
+import SalaryPanel from "@/app/components/SalaryPanel";
+import HomeOverviewSection from "@/app/components/HomeOverviewSection";
+import { useNovaUser } from "@/lib/hooks/useNovaUser";
 
-const PremiumHeader = dynamic(
-() => import("../components/PremiumHeader"),
-{ ssr: false }
-);
+const ALLOWED_TABS = new Set([
+  "home",
+  "stake",
+  "team",
+  "staking",
+  "rewards",
+  "salary",
+]);
+
+function formatToken(value?: bigint | number | null, decimals = 18, max = 2) {
+  if (value == null) return `0 NOVA`;
+
+  const num =
+    typeof value === "bigint" ? Number(value) / 10 ** decimals : Number(value);
+
+  const safe = Number.isFinite(num) ? num : 0;
+
+  return `${safe.toLocaleString(undefined, {
+    maximumFractionDigits: max,
+  })} NOVA`;
+}
 
 export default function DashboardContent() {
+  const params = useSearchParams();
+  const router = useRouter();
+  const user = useNovaUser();
 
-const { isConnected } = useAccount();
-const params = useSearchParams();
-const router = useRouter();
+  const tab = useMemo(() => {
+    const value = params.get("tab") || "home";
+    return ALLOWED_TABS.has(value) ? value : "home";
+  }, [params]);
 
-const tab = params.get("tab") || "home";
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, [tab]);
 
-const [mounted, setMounted] = useState(false);
+  return (
+    <div className="mx-auto max-w-6xl px-3 pb-24 pt-4 md:px-4 md:pb-6">
+      {tab === "home" && (
+        <div className="space-y-6">
+          <HomeOverviewSection
+            activeStake={formatToken(user.activeStake)}
+            rewardBalance={formatToken(user.rewardBalance)}
+            teamVolume={formatToken(user.teamVolume)}
+            directReferrals={user.directCount.toString()}
+            onStakeNow={() => router.push("/dashboard?tab=stake")}
+            onClaimRewards={() => router.push("/dashboard?tab=rewards")}
+            onViewMyStaking={() => router.push("/dashboard?tab=staking")}
+            onViewTeam={() => router.push("/dashboard?tab=team")}
+            onViewSalary={() => router.push("/dashboard?tab=salary")}
+          />
 
-useEffect(() => {
-setMounted(true);
-}, []);
+          <ReferralBox />
+        </div>
+      )}
 
-if (!mounted) return null;
+      {tab === "stake" && (
+        <div className="space-y-6">
+          <StakePanel />
+        </div>
+      )}
 
-if (!isConnected) {
-return (
-<div className="flex items-center justify-center h-[70vh] text-gray-400">
-Connect wallet to access NovaDeFi
-</div>
-);
-}
+      {tab === "staking" && (
+        <div className="space-y-6">
+          <StakingSection />
+        </div>
+      )}
 
-return (
-<div className="relative min-h-screen bg-gradient-to-br from-black via-gray-900 to-black pb-40">
+      {tab === "rewards" && (
+        <div className="space-y-6">
+          <RewardsPanel />
+        </div>
+      )}
 
-  {/* HERO HEADER */}
+      {tab === "team" && (
+        <div className="space-y-6">
+          <TeamSection />
+        </div>
+      )}
 
-  <div className="px-5 pt-6">
-    <PremiumHeader />
-  </div>
-
-  {/* QUICK ACTIONS */}
-
-  <div className="grid grid-cols-4 gap-3 px-5 mt-6">
-
-    <QuickAction
-      label="Deposit"
-      tab="deposit"
-      color="from-green-400 to-emerald-600"
-    />
-
-    <QuickAction
-      label="Withdraw"
-      tab="withdraw"
-      color="from-blue-400 to-cyan-600"
-    />
-
-    <QuickAction
-      label="Team"
-      tab="team"
-      color="from-purple-400 to-purple-600"
-    />
-
-    <QuickAction
-      label="Stake"
-      tab="staking"
-      color="from-yellow-400 to-orange-500"
-    />
-
-  </div>
-
-  {/* STATS */}
-
-  <div className="mt-10 px-5">
-    <StatsGrid />
-  </div>
-
-  {/* SALARY */}
-
-  <div className="mt-8 px-5">
-    <SalaryPanel />
-  </div>
-
-  {/* MAIN CONTENT */}
-
-  {tab === "deposit" && (
-
-    <div className="mt-10 px-5 space-y-6">
-
-      <GlassCard>
-        <DepositPanel />
-      </GlassCard>
-
+      {tab === "salary" && (
+        <div className="space-y-6">
+          <SalaryPanel />
+        </div>
+      )}
     </div>
-
-  )}
-
-  {tab === "withdraw" && (
-
-    <div className="mt-10 px-5 space-y-6">
-
-      <GlassCard>
-        <WithdrawPanel />
-      </GlassCard>
-
-    </div>
-
-  )}
-
-  {tab === "team" && (
-
-    <div className="mt-10 px-5">
-
-      <GlassCard>
-        <TeamSection />
-      </GlassCard>
-
-    </div>
-
-  )}
-
-  {tab === "staking" && (
-
-    <div className="mt-10 px-5">
-
-      <GlassCard>
-        <StakingSection />
-      </GlassCard>
-
-    </div>
-
-  )}
-
-  {/* MOBILE BOTTOM NAV */}
-
-  <div className="fixed bottom-0 left-0 right-0 bg-black/80 backdrop-blur-xl border-t border-white/10 px-6 py-3 flex justify-between">
-
-    <NavButton
-      label="Home"
-      tab="home"
-      active={tab === "home"}
-    />
-
-    <NavButton
-      label="Deposit"
-      tab="deposit"
-      active={tab === "deposit"}
-    />
-
-    <NavButton
-      label="Withdraw"
-      tab="withdraw"
-      active={tab === "withdraw"}
-    />
-
-    <NavButton
-      label="Team"
-      tab="team"
-      active={tab === "team"}
-    />
-
-    <NavButton
-      label="Stake"
-      tab="staking"
-      active={tab === "staking"}
-    />
-
-  </div>
-
-</div>
-
-);
-}
-
-/* ================= GLASS CARD ================= */
-
-function GlassCard({ children }: any) {
-
-return (
-
-<div className="rounded-2xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-xl p-4">
-
-  {children}
-
-</div>
-
-);
-
-}
-
-/* ================= QUICK ACTION ================= */
-
-function QuickAction({
-label,
-tab,
-color,
-}: {
-label: string;
-tab: string;
-color: string;
-}) {
-
-return (
-
-<a
-  href={`/dashboard?tab=${tab}`}
-  className={`rounded-2xl p-3 text-center text-xs font-bold text-white bg-gradient-to-r ${color} shadow-xl hover:scale-105 transition`}
->
-  {label}
-</a>
-
-);
-
-}
-
-/* ================= MOBILE NAV BUTTON ================= */
-
-function NavButton({
-label,
-tab,
-active,
-}: {
-label: string;
-tab: string;
-active: boolean;
-}) {
-
-return (
-
-<a
-  href={`/dashboard?tab=${tab}`}
-  className={`text-xs font-semibold ${
-    active
-      ? "text-green-400"
-      : "text-gray-400"
-  }`}
->
-  {label}
-</a>
-
-);
-
+  );
 }

@@ -1,64 +1,112 @@
 "use client";
 
+import Image from "next/image";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { useAccount, useDisconnect } from "wagmi";
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { Wallet, LogOut, LayoutDashboard } from "lucide-react";
+
 import WalletModal from "./WalletModal";
+import { captureRefFromUrl } from "@/lib/referral";
+
+function shortAddr(addr?: string) {
+  if (!addr) return "";
+  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
 
 export default function Navbar() {
   const { address, isConnected } = useAccount();
   const { disconnect } = useDisconnect();
+  const router = useRouter();
+  const pathname = usePathname();
+
   const [modalOpen, setModalOpen] = useState(false);
   const [mounted, setMounted] = useState(false);
-  const router = useRouter();
 
-  // 🔥 Hydration Fix
+  const shortAddress = useMemo(() => shortAddr(address), [address]);
+  const isDashboardPage = pathname?.startsWith("/dashboard");
+
   useEffect(() => {
     setMounted(true);
   }, []);
+
+  useEffect(() => {
+    if (!mounted) return;
+    captureRefFromUrl();
+  }, [mounted]);
 
   if (!mounted) return null;
 
   return (
     <>
-      <div className="w-full flex justify-between items-center px-6 py-4 border-b border-white/10 backdrop-blur-xl bg-black/40 sticky top-0 z-50">
-
-        <h1
-          onClick={() => router.push("/")}
-          className="text-xl font-bold cursor-pointer bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-transparent"
-        >
-          NovaDeFi
-        </h1>
-
-        {isConnected ? (
-          <div className="flex items-center gap-4">
-
-            <span className="text-sm bg-white/10 px-4 py-2 rounded-lg">
-              {address?.slice(0, 6)}...{address?.slice(-4)}
-            </span>
-
-            <button
-              onClick={() => disconnect()}
-              className="px-4 py-2 rounded-lg bg-red-500 hover:opacity-90 transition"
-            >
-              Disconnect
-            </button>
-
-          </div>
-        ) : (
+      <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-black/70 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between gap-3 px-4 py-4 md:px-6">
           <button
-            onClick={() => setModalOpen(true)}
-            className="px-6 py-2 rounded-lg bg-gradient-to-r from-green-400 to-blue-500 text-black font-semibold hover:opacity-90 transition"
+            type="button"
+            onClick={() => router.push(isConnected ? "/dashboard" : "/")}
+            className="flex min-w-0 items-center gap-3"
           >
-            Connect Wallet
-          </button>
-        )}
-      </div>
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-white/10 bg-white/5 shadow-[0_0_20px_rgba(34,197,94,0.12)]">
+              <Image
+                src="/logo.png"
+                alt="NovaStake Logo"
+                width={44}
+                height={44}
+                className="h-full w-full object-cover"
+                priority
+              />
+            </div>
 
-      <WalletModal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-      />
+            <div className="min-w-0 text-left">
+              <div className="bg-gradient-to-r from-green-400 to-blue-500 bg-clip-text text-lg font-bold text-transparent">
+                NovaStake
+              </div>
+              <div className="truncate text-[11px] text-white/40">
+                Premium Dashboard
+              </div>
+            </div>
+          </button>
+
+          {isConnected ? (
+            <div className="flex items-center gap-2 md:gap-3">
+              {!isDashboardPage && (
+                <button
+                  type="button"
+                  onClick={() => router.push("/dashboard")}
+                  className="hidden items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-gray-200 transition hover:bg-white/10 sm:inline-flex"
+                >
+                  <LayoutDashboard size={15} className="text-blue-300" />
+                  <span>Dashboard</span>
+                </button>
+              )}
+
+              <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-xs text-gray-200 sm:px-4 sm:text-sm">
+                <Wallet size={14} className="text-green-300" />
+                <span>{shortAddress}</span>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => disconnect()}
+                className="inline-flex items-center gap-2 rounded-2xl bg-red-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-600 sm:px-4"
+              >
+                <LogOut size={15} />
+                <span className="hidden sm:inline">Logout</span>
+              </button>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setModalOpen(true)}
+              className="rounded-2xl bg-gradient-to-r from-green-400 to-blue-500 px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-95 md:px-5"
+            >
+              Connect Wallet
+            </button>
+          )}
+        </div>
+      </header>
+
+      <WalletModal open={modalOpen} onClose={() => setModalOpen(false)} />
     </>
   );
 }

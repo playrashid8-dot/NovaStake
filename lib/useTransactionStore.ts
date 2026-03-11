@@ -2,7 +2,7 @@
 
 import { create } from "zustand";
 
-type TxStatus = "success" | "error";
+export type TxStatus = "loading" | "pending" | "success" | "error";
 
 interface TxState {
   open: boolean;
