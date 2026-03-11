@@ -1,72 +1,15 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-:root {
-  --background: #09090c;
-  --foreground: #ffffff;
-}
-
-html {
-  scroll-behavior: smooth;
+html,
+body {
+  padding: 0;
+  margin: 0;
 }
 
 body {
-  background:
-    radial-gradient(circle at 20% 10%, rgba(255, 174, 0, 0.12), transparent 28%),
-    radial-gradient(circle at 80% 18%, rgba(255, 140, 0, 0.08), transparent 24%),
-    radial-gradient(circle at 78% 72%, rgba(255, 185, 43, 0.09), transparent 22%),
-    linear-gradient(180deg, #0d0b10 0%, #09090c 40%, #07080b 100%);
-  color: var(--foreground);
-  min-height: 100vh;
+  background: #0b0b0f;
+  color: white;
   font-family: Arial, Helvetica, sans-serif;
-}
-
-body::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  background-image:
-    radial-gradient(rgba(255, 196, 66, 0.16) 0.7px, transparent 0.7px);
-  background-size: 22px 22px;
-  opacity: 0.06;
-  mix-blend-mode: screen;
-  z-index: 0;
-}
-
-main,
-header,
-section,
-div {
-  position: relative;
-}
-
-input,
-button,
-textarea,
-select {
-  outline: none;
-}
-
-::-webkit-scrollbar {
-  width: 8px;
-}
-
-::-webkit-scrollbar-track {
-  background: #0f1014;
-}
-
-::-webkit-scrollbar-thumb {
-  background: linear-gradient(180deg, #ffcf45, #d08900);
-  border-radius: 999px;
-}
-
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
 }

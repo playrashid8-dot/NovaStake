@@ -9,8 +9,8 @@ export const viewport = {
 };
 
 export const metadata = {
-  title: "NovaDeFi",
-  description: "NovaDeFi Web App",
+  title: "NovaStake",
+  description: "NovaStake Web App",
 };
 
 export default function RootLayout({
