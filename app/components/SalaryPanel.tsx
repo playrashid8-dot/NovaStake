@@ -1,10 +1,12 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useAccount, useWriteContract } from "wagmi";
-import { waitForTransactionReceipt } from "@wagmi/core";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 
-import { config } from "@/lib/wallet";
 import {
   NOVASTAKE_ADDRESS,
   NOVASTAKE_ABI,
@@ -40,15 +42,21 @@ export default function SalaryPanel() {
   const openToast = useToastStore((s) => s.openToast);
 
   const user = useNovaUser();
+
+  const [pendingHash, setPendingHash] = useState<`0x${string}` | undefined>();
   const [loading, setLoading] = useState(false);
 
-  const currentStage = Math.max(0, Number(user.salaryStageClaimed ?? 0));
-  const completedAll = currentStage >= SALARY_STAGE_META.length;
+  const { isLoading: txLoading, isSuccess: txSuccess, isError: txError } =
+    useWaitForTransactionReceipt({
+      hash: pendingHash,
+    });
 
-  const nextStage = useMemo(() => {
-    if (completedAll) return null;
-    return SALARY_STAGE_META[currentStage] ?? null;
-  }, [completedAll, currentStage]);
+  const currentStage = Number(user.salaryStageClaimed ?? 0);
+
+  const nextStage = useMemo(
+    () => SALARY_STAGE_META.find((s) => s.stage === currentStage + 1),
+    [currentStage]
+  );
 
   async function claimSalary() {
     if (!address || loading || !user.canClaimSalary) return;
@@ -62,13 +70,30 @@ export default function SalaryPanel() {
         functionName: "claimSalary",
       });
 
+      setPendingHash(hash);
+
       openModal({
         status: "pending",
         message: "Claiming salary reward...",
         hash,
       });
 
-      await waitForTransactionReceipt(config, { hash });
+      openToast("Salary transaction sent", "success");
+    } catch (err: any) {
+      openModal({
+        status: "error",
+        message: err?.shortMessage || err?.message || "Claim failed",
+      });
+
+      openToast(err?.shortMessage || err?.message || "Claim failed", "error");
+      setLoading(false);
+    }
+  }
+
+  useMemo(() => {
+    async function handleSuccess() {
+      if (!pendingHash || !txSuccess || !address) return;
+
       await user.refetchAll?.();
 
       pushDashboardHistory(address, {
@@ -85,21 +110,38 @@ export default function SalaryPanel() {
       openModal({
         status: "success",
         message: "Salary claimed successfully ✅",
-        hash,
+        hash: pendingHash,
       });
 
       openToast("Salary claimed ✅", "success");
-    } catch (err: any) {
-      openModal({
-        status: "error",
-        message: err?.shortMessage || err?.message || "Claim failed",
-      });
-
-      openToast(err?.shortMessage || err?.message || "Claim failed", "error");
-    } finally {
       setLoading(false);
+      setPendingHash(undefined);
     }
-  }
+
+    handleSuccess();
+  }, [
+    txSuccess,
+    pendingHash,
+    address,
+    currentStage,
+    openModal,
+    openToast,
+    user,
+  ]);
+
+  useMemo(() => {
+    if (!txError || !pendingHash) return;
+
+    openModal({
+      status: "error",
+      message: "Salary transaction failed",
+      hash: pendingHash,
+    });
+
+    openToast("Salary transaction failed", "error");
+    setLoading(false);
+    setPendingHash(undefined);
+  }, [txError, pendingHash, openModal, openToast]);
 
   if (!isConnected) {
     return (
@@ -110,14 +152,13 @@ export default function SalaryPanel() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-4xl space-y-4">
-      <div className="rounded-3xl border border-white/10 bg-white/5 p-4 md:p-5">
-        <h2 className="text-xl font-extrabold text-pink-300">Salary Rewards</h2>
-        <p className="mt-1 text-sm text-white/55">
-          Unlock salary rewards through direct referrals, team growth, and team volume.
-        </p>
+    <div className="mx-auto w-full max-w-3xl space-y-4">
+      <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+        <h2 className="text-xl font-extrabold text-pink-300">
+          Salary Rewards
+        </h2>
 
-        <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div className="mt-4 grid grid-cols-2 gap-3">
           <MiniBox title="Direct" value={String(user.directCount ?? 0n)} />
           <MiniBox title="Team" value={String(user.teamCount ?? 0n)} />
           <MiniBox
@@ -131,55 +172,48 @@ export default function SalaryPanel() {
         </div>
       </div>
 
-      {!completedAll && nextStage ? (
-        <div className="rounded-3xl border border-white/10 bg-white/5 p-4 md:p-5">
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+      {nextStage ? (
+        <div className="rounded-3xl border border-white/10 bg-white/5 p-4">
+          <div className="flex items-center justify-between">
             <div>
-              <div className="text-sm text-white/60">Next Salary Stage</div>
-              <div className="text-xl font-bold text-white">
+              <div className="text-sm text-white/60">Next Stage</div>
+              <div className="text-lg font-bold text-white">
                 Stage {nextStage.stage}
               </div>
             </div>
 
-            <div className="text-left md:text-right">
+            <div className="text-right">
               <div className="text-sm text-white/60">Reward</div>
-              <div className="text-xl font-bold text-green-300">
+              <div className="text-lg font-bold text-green-300">
                 {nextStage.reward} NOVA
               </div>
             </div>
           </div>
 
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <ProgressBox
-              title="Direct Required"
-              current={Number(user.directCount ?? 0n)}
-              target={nextStage.direct}
-            />
-            <ProgressBox
-              title="Team Required"
-              current={Number(user.teamCount ?? 0n)}
-              target={nextStage.team}
-            />
-            <ProgressBox
-              title="Volume Required"
-              current={Number(formatToken(user.teamVolume, 18, 2).replace(/,/g, ""))}
-              target={nextStage.volume}
-              suffix=" NOVA"
-            />
+          <div className="mt-4 space-y-2 text-sm text-white/70">
+            <div>
+              Direct: {String(user.directCount ?? 0n)} / {nextStage.direct}
+            </div>
+            <div>
+              Team: {String(user.teamCount ?? 0n)} / {nextStage.team}
+            </div>
+            <div>
+              Volume: {formatToken(user.teamVolume)} / {nextStage.volume} NOVA
+            </div>
           </div>
 
           <button
             type="button"
             onClick={claimSalary}
-            disabled={!user.canClaimSalary || loading}
+            disabled={!user.canClaimSalary || loading || txLoading}
             className={cn(
-              "mt-5 w-full rounded-xl py-3 font-bold transition",
+              "mt-4 w-full rounded-xl py-3 font-bold transition",
               user.canClaimSalary
                 ? "bg-gradient-to-r from-pink-500 to-purple-500 text-white hover:opacity-95"
                 : "cursor-not-allowed bg-white/10 text-white/50"
             )}
           >
-            {loading ? "Claiming..." : user.canClaimSalary ? "Claim Salary" : "Requirements Not Met"}
+            {loading || txLoading ? "Claiming..." : "Claim Salary"}
           </button>
         </div>
       ) : (
@@ -194,7 +228,9 @@ export default function SalaryPanel() {
       )}
 
       <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-xs text-white/45">
-        <div>• Salary unlock depends on direct, team, and team volume growth.</div>
+        <div>
+          • Salary unlock depends on direct, team, and team volume growth.
+        </div>
         <div className="mt-1">• Salary reward goes to reward balance.</div>
         <div className="mt-1">• Reward unit is NOVA.</div>
       </div>
@@ -213,37 +249,6 @@ function MiniBox({
     <div className="rounded-xl border border-white/10 bg-black/20 p-3">
       <div className="text-xs text-white/45">{title}</div>
       <div className="mt-1 text-base font-bold text-white">{value}</div>
-    </div>
-  );
-}
-
-function ProgressBox({
-  title,
-  current,
-  target,
-  suffix = "",
-}: {
-  title: string;
-  current: number;
-  target: number;
-  suffix?: string;
-}) {
-  const percent = target > 0 ? Math.min((current / target) * 100, 100) : 0;
-
-  return (
-    <div className="rounded-xl border border-white/10 bg-black/20 p-3">
-      <div className="text-xs text-white/45">{title}</div>
-      <div className="mt-1 text-sm font-semibold text-white">
-        {current.toLocaleString()} / {target.toLocaleString()}
-        {suffix}
-      </div>
-
-      <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-white/10">
-        <div
-          className="h-full rounded-full bg-gradient-to-r from-pink-500 to-purple-500"
-          style={{ width: `${percent}%` }}
-        />
-      </div>
     </div>
   );
 }

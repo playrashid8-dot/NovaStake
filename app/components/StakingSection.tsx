@@ -1,16 +1,14 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useAccount, useWriteContract } from "wagmi";
-import { waitForTransactionReceipt } from "@wagmi/core";
+import { useEffect, useMemo, useState } from "react";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
 import { Clock3, Lock } from "lucide-react";
 
-import { config } from "@/lib/wallet";
-import {
-  NOVASTAKE_ADDRESS,
-  NOVASTAKE_ABI,
-  getPlanMeta,
-} from "@/lib/contract";
+import { NOVASTAKE_ADDRESS, NOVASTAKE_ABI, getPlanMeta } from "@/lib/contract";
 import { useTransactionStore } from "@/lib/useTransactionStore";
 import { useToastStore } from "@/lib/useToastStore";
 import { useNovaUser } from "@/lib/hooks/useNovaUser";
@@ -51,6 +49,14 @@ function getTimeLeft(endTime?: bigint | null) {
   return `${m}m`;
 }
 
+type PendingAction = "reward" | "withdraw" | null;
+
+type PendingStake = {
+  index: number;
+  amount: bigint;
+  pendingReward: bigint;
+};
+
 export default function StakingSection() {
   const { address, isConnected } = useAccount();
   const { writeContractAsync } = useWriteContract();
@@ -59,7 +65,16 @@ export default function StakingSection() {
   const openToast = useToastStore((s) => s.openToast);
 
   const user = useNovaUser();
+
   const [loading, setLoading] = useState<string | null>(null);
+  const [pendingHash, setPendingHash] = useState<`0x${string}` | undefined>();
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [pendingStake, setPendingStake] = useState<PendingStake | null>(null);
+
+  const { isLoading: txPending, isSuccess: txSuccess, isError: txError } =
+    useWaitForTransactionReceipt({
+      hash: pendingHash,
+    });
 
   const stakes = user.stakes ?? [];
 
@@ -82,7 +97,7 @@ export default function StakingSection() {
   }, [sorted]);
 
   async function claimReward(stake: (typeof sorted)[number]) {
-    if (!address) return;
+    if (!address || txPending) return;
 
     try {
       setLoading(`reward-${stake.index}`);
@@ -94,33 +109,19 @@ export default function StakingSection() {
         args: [BigInt(stake.index)],
       });
 
+      setPendingHash(hash);
+      setPendingAction("reward");
+      setPendingStake({
+        index: stake.index,
+        amount: stake.amount,
+        pendingReward: stake.pendingReward,
+      });
+
       openModal({
         status: "pending",
         message: "Claiming reward...",
         hash,
       });
-
-      await waitForTransactionReceipt(config, { hash });
-      await user.refetchAll?.();
-
-      pushDashboardHistory(address, {
-        type: "reward",
-        title: "Reward Claimed",
-        subtitle: new Date().toLocaleString(),
-        amount: `+${formatToken(stake.pendingReward)} NOVA`,
-        amountClass: "text-green-400",
-        badge: "Reward",
-        badgeClass: "bg-green-500/15 text-green-300",
-        ts: Math.floor(Date.now() / 1000),
-      });
-
-      openModal({
-        status: "success",
-        message: "Reward claimed successfully ✅",
-        hash,
-      });
-
-      openToast("Reward claimed ✅", "success");
     } catch (e: any) {
       openModal({
         status: "error",
@@ -128,13 +129,15 @@ export default function StakingSection() {
       });
 
       openToast(e?.shortMessage || e?.message || "Claim reward failed", "error");
-    } finally {
       setLoading(null);
+      setPendingHash(undefined);
+      setPendingAction(null);
+      setPendingStake(null);
     }
   }
 
   async function withdrawStake(stake: (typeof sorted)[number]) {
-    if (!address) return;
+    if (!address || txPending) return;
 
     try {
       setLoading(`withdraw-${stake.index}`);
@@ -146,33 +149,19 @@ export default function StakingSection() {
         args: [BigInt(stake.index)],
       });
 
+      setPendingHash(hash);
+      setPendingAction("withdraw");
+      setPendingStake({
+        index: stake.index,
+        amount: stake.amount,
+        pendingReward: stake.pendingReward,
+      });
+
       openModal({
         status: "pending",
         message: "Withdrawing matured stake...",
         hash,
       });
-
-      await waitForTransactionReceipt(config, { hash });
-      await user.refetchAll?.();
-
-      pushDashboardHistory(address, {
-        type: "stake-claim",
-        title: "Stake Withdrawn",
-        subtitle: new Date().toLocaleString(),
-        amount: `+${formatToken(stake.amount)} NOVA`,
-        amountClass: "text-blue-400",
-        badge: "Withdraw",
-        badgeClass: "bg-blue-500/15 text-blue-300",
-        ts: Math.floor(Date.now() / 1000),
-      });
-
-      openModal({
-        status: "success",
-        message: "Stake withdrawn successfully ✅",
-        hash,
-      });
-
-      openToast("Stake withdrawn ✅", "success");
     } catch (e: any) {
       openModal({
         status: "error",
@@ -180,10 +169,96 @@ export default function StakingSection() {
       });
 
       openToast(e?.shortMessage || e?.message || "Withdraw failed", "error");
-    } finally {
       setLoading(null);
+      setPendingHash(undefined);
+      setPendingAction(null);
+      setPendingStake(null);
     }
   }
+
+  useEffect(() => {
+    async function handleSuccess() {
+      if (!txSuccess || !pendingHash || !address || !pendingAction || !pendingStake) {
+        return;
+      }
+
+      await user.refetchAll?.();
+
+      if (pendingAction === "reward") {
+        pushDashboardHistory(address, {
+          type: "reward",
+          title: "Reward Claimed",
+          subtitle: new Date().toLocaleString(),
+          amount: `+${formatToken(pendingStake.pendingReward)} NOVA`,
+          amountClass: "text-green-400",
+          badge: "Reward",
+          badgeClass: "bg-green-500/15 text-green-300",
+          ts: Math.floor(Date.now() / 1000),
+        });
+
+        openModal({
+          status: "success",
+          message: "Reward claimed successfully ✅",
+          hash: pendingHash,
+        });
+
+        openToast("Reward claimed ✅", "success");
+      }
+
+      if (pendingAction === "withdraw") {
+        pushDashboardHistory(address, {
+          type: "stake-claim",
+          title: "Stake Withdrawn",
+          subtitle: new Date().toLocaleString(),
+          amount: `+${formatToken(pendingStake.amount)} NOVA`,
+          amountClass: "text-blue-400",
+          badge: "Withdraw",
+          badgeClass: "bg-blue-500/15 text-blue-300",
+          ts: Math.floor(Date.now() / 1000),
+        });
+
+        openModal({
+          status: "success",
+          message: "Stake withdrawn successfully ✅",
+          hash: pendingHash,
+        });
+
+        openToast("Stake withdrawn ✅", "success");
+      }
+
+      setLoading(null);
+      setPendingHash(undefined);
+      setPendingAction(null);
+      setPendingStake(null);
+    }
+
+    handleSuccess();
+  }, [txSuccess, pendingHash, pendingAction, pendingStake, address, user, openModal, openToast]);
+
+  useEffect(() => {
+    if (!txError || !pendingHash) return;
+
+    openModal({
+      status: "error",
+      message:
+        pendingAction === "withdraw"
+          ? "Withdraw transaction failed"
+          : "Reward transaction failed",
+      hash: pendingHash,
+    });
+
+    openToast(
+      pendingAction === "withdraw"
+        ? "Withdraw transaction failed"
+        : "Reward transaction failed",
+      "error"
+    );
+
+    setLoading(null);
+    setPendingHash(undefined);
+    setPendingAction(null);
+    setPendingStake(null);
+  }, [txError, pendingHash, pendingAction, openModal, openToast]);
 
   if (!isConnected) {
     return (
@@ -232,7 +307,7 @@ export default function StakingSection() {
 
           return (
             <div
-              key={stake.index}
+              key={`${stake.index}-${stake.startTime?.toString?.() ?? stake.index}`}
               className="rounded-2xl border border-white/10 bg-black/30 p-4"
             >
               <div className="flex items-start justify-between gap-3">
@@ -258,10 +333,7 @@ export default function StakingSection() {
               </div>
 
               <div className="mt-4 grid grid-cols-2 gap-3">
-                <Info
-                  label="Stake Amount"
-                  value={`${formatToken(stake.amount)} NOVA`}
-                />
+                <Info label="Stake Amount" value={`${formatToken(stake.amount)} NOVA`} />
                 <Info
                   label="Pending Reward"
                   value={`${formatToken(stake.pendingReward)} NOVA`}
@@ -279,7 +351,7 @@ export default function StakingSection() {
                 <button
                   type="button"
                   onClick={() => claimReward(stake)}
-                  disabled={stake.withdrawn || stake.pendingReward <= 0n || rewardLoading}
+                  disabled={stake.withdrawn || stake.pendingReward <= 0n || rewardLoading || txPending}
                   className={cn(
                     "rounded-xl py-3 text-sm font-bold transition",
                     stake.withdrawn || stake.pendingReward <= 0n
@@ -287,13 +359,15 @@ export default function StakingSection() {
                       : "bg-green-500 text-black"
                   )}
                 >
-                  {rewardLoading ? "Processing..." : "Claim Reward"}
+                  {rewardLoading || (txPending && pendingAction === "reward")
+                    ? "Processing..."
+                    : "Claim Reward"}
                 </button>
 
                 <button
                   type="button"
                   onClick={() => withdrawStake(stake)}
-                  disabled={stake.withdrawn || !stake.matured || withdrawLoading}
+                  disabled={stake.withdrawn || !stake.matured || withdrawLoading || txPending}
                   className={cn(
                     "rounded-xl py-3 text-sm font-bold transition",
                     stake.withdrawn || !stake.matured
@@ -301,7 +375,9 @@ export default function StakingSection() {
                       : "bg-yellow-400 text-black"
                   )}
                 >
-                  {withdrawLoading ? "Processing..." : "Withdraw Stake"}
+                  {withdrawLoading || (txPending && pendingAction === "withdraw")
+                    ? "Processing..."
+                    : "Withdraw Stake"}
                 </button>
               </div>
             </div>
