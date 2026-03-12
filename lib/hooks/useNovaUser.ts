@@ -9,17 +9,21 @@ import {
   NOVA_TOKEN_ABI,
   NOVA_TOKEN_ADDRESS,
   PLAN_META,
+  ZERO_ADDRESS,
 } from "../contract";
 
-type StakeTuple = readonly [
-  bigint, // amount
-  bigint, // totalReward
-  bigint, // claimedReward
-  bigint, // startTime
-  bigint, // endTime
-  number | bigint, // planId
-  boolean // withdrawn
-];
+type RawStake =
+  | readonly [bigint, bigint, bigint, bigint, bigint, number | bigint, boolean]
+  | {
+      amount?: bigint;
+      totalReward?: bigint;
+      claimedReward?: bigint;
+      startTime?: bigint;
+      endTime?: bigint;
+      planId?: number | bigint;
+      withdrawn?: boolean;
+      [key: number]: unknown;
+    };
 
 export type NovaUserStake = {
   index: number;
@@ -29,9 +33,11 @@ export type NovaUserStake = {
   pendingReward: bigint;
   startTime: bigint;
   endTime: bigint;
+  nextClaimTime: bigint;
   planId: number;
   withdrawn: boolean;
   matured: boolean;
+  active: boolean;
   planName: string;
   roiLabel: string;
 };
@@ -49,8 +55,6 @@ export type NovaUserSummary = {
   totalPendingRewards: bigint;
 };
 
-const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
-
 function toBigIntSafe(value: unknown): bigint {
   if (typeof value === "bigint") return value;
   if (typeof value === "number") return BigInt(value);
@@ -66,6 +70,90 @@ function toBigIntSafe(value: unknown): bigint {
 
 function toStringSafe(value: unknown): string {
   return typeof value === "string" ? value : ZERO_ADDRESS;
+}
+
+function getStakeAmount(stake: RawStake): bigint {
+  if (
+    typeof stake === "object" &&
+    stake !== null &&
+    "amount" in stake &&
+    stake.amount != null
+  ) {
+    return toBigIntSafe(stake.amount);
+  }
+  return toBigIntSafe((stake as any)?.[0]);
+}
+
+function getStakeTotalReward(stake: RawStake): bigint {
+  if (
+    typeof stake === "object" &&
+    stake !== null &&
+    "totalReward" in stake &&
+    stake.totalReward != null
+  ) {
+    return toBigIntSafe(stake.totalReward);
+  }
+  return toBigIntSafe((stake as any)?.[1]);
+}
+
+function getStakeClaimedReward(stake: RawStake): bigint {
+  if (
+    typeof stake === "object" &&
+    stake !== null &&
+    "claimedReward" in stake &&
+    stake.claimedReward != null
+  ) {
+    return toBigIntSafe(stake.claimedReward);
+  }
+  return toBigIntSafe((stake as any)?.[2]);
+}
+
+function getStakeStartTime(stake: RawStake): bigint {
+  if (
+    typeof stake === "object" &&
+    stake !== null &&
+    "startTime" in stake &&
+    stake.startTime != null
+  ) {
+    return toBigIntSafe(stake.startTime);
+  }
+  return toBigIntSafe((stake as any)?.[3]);
+}
+
+function getStakeEndTime(stake: RawStake): bigint {
+  if (
+    typeof stake === "object" &&
+    stake !== null &&
+    "endTime" in stake &&
+    stake.endTime != null
+  ) {
+    return toBigIntSafe(stake.endTime);
+  }
+  return toBigIntSafe((stake as any)?.[4]);
+}
+
+function getStakePlanId(stake: RawStake): number {
+  if (
+    typeof stake === "object" &&
+    stake !== null &&
+    "planId" in stake &&
+    stake.planId != null
+  ) {
+    return Number(stake.planId);
+  }
+  return Number((stake as any)?.[5] ?? 0);
+}
+
+function getStakeWithdrawn(stake: RawStake): boolean {
+  if (
+    typeof stake === "object" &&
+    stake !== null &&
+    "withdrawn" in stake &&
+    stake.withdrawn != null
+  ) {
+    return Boolean(stake.withdrawn);
+  }
+  return Boolean((stake as any)?.[6]);
 }
 
 function normalizeSummary(data: unknown): NovaUserSummary | null {
@@ -106,18 +194,18 @@ function normalizeSummary(data: unknown): NovaUserSummary | null {
   return null;
 }
 
-function isRealStake(stake: StakeTuple | undefined | null) {
+function isRealStake(stake: RawStake | undefined | null) {
   if (!stake) return false;
-  const amount = stake[0] ?? 0n;
-  const startTime = stake[3] ?? 0n;
-  const endTime = stake[4] ?? 0n;
+
+  const amount = getStakeAmount(stake);
+  const startTime = getStakeStartTime(stake);
+  const endTime = getStakeEndTime(stake);
 
   return amount > 0n || startTime > 0n || endTime > 0n;
 }
 
 export function useNovaUser() {
   const { address, isConnected } = useAccount();
-
   const enabled = Boolean(address && isConnected);
 
   const summaryRead = useReadContract({
@@ -127,7 +215,7 @@ export function useNovaUser() {
     args: address ? [address] : undefined,
     query: {
       enabled,
-      refetchInterval: 10_000,
+      refetchInterval: 10000,
     },
   });
 
@@ -138,7 +226,7 @@ export function useNovaUser() {
     args: address ? [address] : undefined,
     query: {
       enabled,
-      refetchInterval: 10_000,
+      refetchInterval: 10000,
     },
   });
 
@@ -149,7 +237,7 @@ export function useNovaUser() {
     args: address ? [address] : undefined,
     query: {
       enabled,
-      refetchInterval: 10_000,
+      refetchInterval: 10000,
     },
   });
 
@@ -158,16 +246,7 @@ export function useNovaUser() {
     abi: NOVASTAKE_ABI,
     functionName: "contractTokenBalance",
     query: {
-      refetchInterval: 10_000,
-    },
-  });
-
-  const treasuryReferralBalanceRead = useReadContract({
-    address: NOVASTAKE_ADDRESS,
-    abi: NOVASTAKE_ABI,
-    functionName: "treasuryReferralBalance",
-    query: {
-      refetchInterval: 10_000,
+      refetchInterval: 10000,
     },
   });
 
@@ -178,7 +257,7 @@ export function useNovaUser() {
     args: address ? [address] : undefined,
     query: {
       enabled,
-      refetchInterval: 10_000,
+      refetchInterval: 10000,
     },
   });
 
@@ -189,44 +268,50 @@ export function useNovaUser() {
     args: address ? [address, NOVASTAKE_ADDRESS] : undefined,
     query: {
       enabled,
-      refetchInterval: 10_000,
+      refetchInterval: 10000,
     },
   });
 
   const rawStakes = useMemo(() => {
     if (!stakesRead.data || !Array.isArray(stakesRead.data)) return [];
-    return stakesRead.data as StakeTuple[];
+    return stakesRead.data as RawStake[];
   }, [stakesRead.data]);
+
+  const validStakeItems = useMemo(() => {
+    return rawStakes
+      .map((stake, rawIndex) => ({ stake, rawIndex }))
+      .filter(({ stake }) => isRealStake(stake));
+  }, [rawStakes]);
 
   const pendingRewardReads = useReadContracts({
     contracts:
-      enabled && address && rawStakes.length > 0
-        ? rawStakes.map((_, index) => ({
+      enabled && address && validStakeItems.length > 0
+        ? validStakeItems.map(({ rawIndex }) => ({
             address: NOVASTAKE_ADDRESS,
             abi: NOVASTAKE_ABI,
             functionName: "pendingReward",
-            args: [address, BigInt(index)],
+            args: [address, BigInt(rawIndex)],
           }))
         : [],
     query: {
-      enabled: enabled && rawStakes.length > 0,
-      refetchInterval: 10_000,
+      enabled: enabled && validStakeItems.length > 0,
+      refetchInterval: 10000,
     },
   });
 
   const nextClaimReads = useReadContracts({
     contracts:
-      enabled && address && rawStakes.length > 0
-        ? rawStakes.map((_, index) => ({
+      enabled && address && validStakeItems.length > 0
+        ? validStakeItems.map(({ rawIndex }) => ({
             address: NOVASTAKE_ADDRESS,
             abi: NOVASTAKE_ABI,
             functionName: "nextClaimTime",
-            args: [address, BigInt(index)],
+            args: [address, BigInt(rawIndex)],
           }))
         : [],
     query: {
-      enabled: enabled && rawStakes.length > 0,
-      refetchInterval: 10_000,
+      enabled: enabled && validStakeItems.length > 0,
+      refetchInterval: 10000,
     },
   });
 
@@ -237,53 +322,53 @@ export function useNovaUser() {
   const stakes = useMemo<NovaUserStake[]>(() => {
     const now = Math.floor(Date.now() / 1000);
 
-    return rawStakes
-      .map((stake, rawIndex) => ({ stake, rawIndex }))
-      .filter(({ stake }) => isRealStake(stake))
-      .map(({ stake, rawIndex }) => {
-        const pendingReward =
-          (pendingRewardReads.data?.[rawIndex]?.result as bigint | undefined) ?? 0n;
+    return validStakeItems.map(({ stake, rawIndex }, visibleIndex) => {
+      const pendingReward =
+        (pendingRewardReads.data?.[visibleIndex]?.result as bigint | undefined) ?? 0n;
 
-        const planId = Number(stake[5] ?? 0);
-        const plan = PLAN_META.find((p) => p.id === planId) ?? PLAN_META[0];
+      const nextClaimTime =
+        (nextClaimReads.data?.[visibleIndex]?.result as bigint | undefined) ?? 0n;
 
-        const amount = stake[0] ?? 0n;
-        const totalReward = stake[1] ?? 0n;
-        const claimedReward = stake[2] ?? 0n;
-        const startTime = stake[3] ?? 0n;
-        const endTime = stake[4] ?? 0n;
-        const withdrawn = Boolean(stake[6]);
+      const amount = getStakeAmount(stake);
+      const totalReward = getStakeTotalReward(stake);
+      const claimedReward = getStakeClaimedReward(stake);
+      const startTime = getStakeStartTime(stake);
+      const endTime = getStakeEndTime(stake);
+      const planId = getStakePlanId(stake);
+      const withdrawn = getStakeWithdrawn(stake);
 
-        return {
-          index: rawIndex,
-          amount,
-          totalReward,
-          claimedReward,
-          pendingReward,
-          startTime,
-          endTime,
-          planId,
-          withdrawn,
-          matured: !withdrawn && endTime > 0n && Number(endTime) <= now,
-          planName: plan.name,
-          roiLabel: plan.roi,
-        };
-      });
-  }, [rawStakes, pendingRewardReads.data]);
+      const matured = !withdrawn && endTime > 0n && Number(endTime) <= now;
+      const active = !withdrawn && !matured;
+
+      const plan = PLAN_META.find((p) => p.id === planId) ?? PLAN_META[0];
+
+      return {
+        index: rawIndex,
+        amount,
+        totalReward,
+        claimedReward,
+        pendingReward,
+        startTime,
+        endTime,
+        nextClaimTime,
+        planId,
+        withdrawn,
+        matured,
+        active,
+        planName: plan.name,
+        roiLabel: plan.roi,
+      };
+    });
+  }, [validStakeItems, pendingRewardReads.data, nextClaimReads.data]);
+
+  const nextClaimTimes = useMemo(() => {
+    return stakes.map((stake) => stake.nextClaimTime);
+  }, [stakes]);
 
   const totalPendingRewards = useMemo(() => {
     if (summary?.totalPendingRewards != null) return summary.totalPendingRewards;
     return stakes.reduce((sum, stake) => sum + stake.pendingReward, 0n);
   }, [summary, stakes]);
-
-  const nextClaimTimes = useMemo(() => {
-    return rawStakes
-      .map((stake, rawIndex) => ({ stake, rawIndex }))
-      .filter(({ stake }) => isRealStake(stake))
-      .map(({ rawIndex }) => {
-        return (nextClaimReads.data?.[rawIndex]?.result as bigint | undefined) ?? 0n;
-      });
-  }, [rawStakes, nextClaimReads.data]);
 
   const maturedPrincipal = useMemo(() => {
     return stakes.reduce((sum, stake) => {
@@ -291,6 +376,27 @@ export function useNovaUser() {
       return sum;
     }, 0n);
   }, [stakes]);
+
+  const activeStakes = useMemo(() => {
+    return stakes.filter((stake) => stake.active);
+  }, [stakes]);
+
+  const runningStakes = useMemo(() => {
+    return stakes.filter((stake) => !stake.withdrawn && !stake.matured);
+  }, [stakes]);
+
+  const maturedStakes = useMemo(() => {
+    return stakes.filter((stake) => stake.matured && !stake.withdrawn);
+  }, [stakes]);
+
+  const withdrawnStakes = useMemo(() => {
+    return stakes.filter((stake) => stake.withdrawn);
+  }, [stakes]);
+
+  const activeStakeCount = activeStakes.length;
+  const runningStakeCount = runningStakes.length;
+  const maturedStakeCount = maturedStakes.length;
+  const withdrawnStakeCount = withdrawnStakes.length;
 
   const allowance = useMemo(() => {
     return (allowanceRead.data as bigint | undefined) ?? 0n;
@@ -319,7 +425,6 @@ export function useNovaUser() {
       stakesRead.refetch(),
       canClaimSalaryRead.refetch(),
       contractBalanceRead.refetch(),
-      treasuryReferralBalanceRead.refetch(),
       walletTokenBalanceRead.refetch(),
       allowanceRead.refetch(),
       pendingRewardReads.refetch(),
@@ -345,6 +450,10 @@ export function useNovaUser() {
     summary,
     referrer,
     stakes,
+    activeStakes,
+    runningStakes,
+    maturedStakes,
+    withdrawnStakes,
     nextClaimTimes,
 
     activePrincipal,
@@ -359,13 +468,16 @@ export function useNovaUser() {
     totalPendingRewards,
     maturedPrincipal,
 
+    activeStakeCount,
+    runningStakeCount,
+    maturedStakeCount,
+    withdrawnStakeCount,
+
     canClaimSalary: Boolean(canClaimSalaryRead.data),
     walletTokenBalance:
       (walletTokenBalanceRead.data as bigint | undefined) ?? 0n,
     contractTokenBalance:
       (contractBalanceRead.data as bigint | undefined) ?? 0n,
-    treasuryReferralBalance:
-      (treasuryReferralBalanceRead.data as bigint | undefined) ?? 0n,
     allowance,
 
     isLoading,

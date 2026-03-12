@@ -7,7 +7,6 @@ import { useAccount } from "wagmi";
 import { useRouter } from "next/navigation";
 
 import GlobalLoader from "@/app/components/GlobalLoader";
-import NetworkGuard from "@/app/components/NetworkGuard";
 
 const DashboardContent = dynamic(() => import("./DashboardContent"), {
   ssr: false,
@@ -35,11 +34,9 @@ export default function DashboardPage() {
     <main className="min-h-screen">
       <Navbar />
 
-      <NetworkGuard>
-        <Suspense fallback={<GlobalLoader />}>
-          <DashboardContent />
-        </Suspense>
-      </NetworkGuard>
+      <Suspense fallback={<GlobalLoader />}>
+        <DashboardContent />
+      </Suspense>
     </main>
   );
 }

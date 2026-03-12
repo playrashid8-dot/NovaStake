@@ -26,6 +26,12 @@ export default function NetworkGuard({ children }: NetworkGuardProps) {
   async function switchToBSC() {
     if (switching) return;
 
+    if (!switchChainAsync) {
+      setManualMode(true);
+      setErrorMsg("Automatic network switch is not available in this wallet.");
+      return;
+    }
+
     try {
       setSwitching(true);
       setErrorMsg("");
@@ -34,7 +40,6 @@ export default function NetworkGuard({ children }: NetworkGuardProps) {
       await switchChainAsync({ chainId: bsc.id });
     } catch (e: any) {
       setManualMode(true);
-
       setErrorMsg(
         e?.shortMessage ||
           e?.message ||
@@ -47,7 +52,12 @@ export default function NetworkGuard({ children }: NetworkGuardProps) {
 
   async function addAndSwitchBSC() {
     try {
-      const ethereum = (window as any).ethereum;
+      if (typeof window === "undefined") {
+        setErrorMsg("Window is not available.");
+        return;
+      }
+
+      const ethereum = (window as Window & { ethereum?: any }).ethereum;
 
       if (!ethereum) {
         setErrorMsg("No wallet provider detected.");

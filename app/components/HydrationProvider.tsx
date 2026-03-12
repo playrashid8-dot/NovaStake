@@ -11,18 +11,14 @@ export default function HydrationProvider({
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      setMounted(true);
-    });
-
-    return () => cancelAnimationFrame(frame);
+    setMounted(true);
   }, []);
 
   if (!mounted) {
     return (
       <div className="relative flex min-h-screen items-center justify-center bg-black text-sm text-gray-400">
         <GlobalLoader />
-        Loading NovaStake...
+        <span className="animate-pulse">Loading NovaStake...</span>
       </div>
     );
   }

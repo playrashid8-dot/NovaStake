@@ -39,7 +39,10 @@ export default function WalletModal({
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") handleClose();
+      if (e.key === "Escape") {
+        if (onClose) onClose();
+        if (!isControlled) setInternalOpen(false);
+      }
     }
 
     if (modalOpen) {
@@ -47,7 +50,7 @@ export default function WalletModal({
     }
 
     return () => window.removeEventListener("keydown", onKey);
-  }, [modalOpen]);
+  }, [modalOpen, onClose, isControlled]);
 
   useEffect(() => {
     if (!modalOpen) return;
@@ -91,12 +94,14 @@ export default function WalletModal({
     try {
       setLoadingUid(connector.uid);
 
-      const anyConn: any = connector;
       const isWalletConnect = connector.name
         .toLowerCase()
         .includes("walletconnect");
 
-      if (!isWalletConnect && anyConn?.ready === false) {
+      const notReady =
+        !isWalletConnect && (connector as any)?.ready === false;
+
+      if (notReady) {
         openToast(`${connector.name} not available on this device`, "error");
         return;
       }
@@ -159,11 +164,13 @@ export default function WalletModal({
 
             <div className="mt-5 space-y-3">
               {sortedConnectors.map((connector) => {
-                const anyConn: any = connector;
                 const isWalletConnect = connector.name
                   .toLowerCase()
                   .includes("walletconnect");
-                const notReady = !isWalletConnect && anyConn?.ready === false;
+
+                const notReady =
+                  !isWalletConnect && (connector as any)?.ready === false;
+
                 const loading = loadingUid === connector.uid;
 
                 return (

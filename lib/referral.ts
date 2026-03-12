@@ -43,20 +43,28 @@ export function getStoredRefAddress() {
   return "";
 }
 
-export function captureRefFromUrl(ref?: string | null) {
+export function captureRefFromUrl(ref?: string | null, selfAddress?: string) {
   if (typeof window === "undefined") return "";
 
   let incoming = ref;
 
   if (!incoming) {
-    const params = new URLSearchParams(window.location.search);
-    incoming = params.get("ref");
+    try {
+      const params = new URLSearchParams(window.location.search);
+      incoming = params.get("ref");
+    } catch {
+      return "";
+    }
   }
 
   const a = normalizeAddress(incoming);
+
   if (!isHexAddress(a)) return "";
 
+  if (selfAddress && a === normalizeAddress(selfAddress)) return "";
+
   storeRefAddress(a);
+
   return a;
 }
 

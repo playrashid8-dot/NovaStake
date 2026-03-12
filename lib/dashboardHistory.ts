@@ -11,7 +11,8 @@ export type DashboardHistoryEntry = {
 };
 
 function getKey(address?: string | null) {
-  return `nova-history:${address?.toLowerCase() || "guest"}`;
+  const safe = address?.toLowerCase?.() ?? "guest";
+  return `nova-history:${safe}`;
 }
 
 export function readDashboardHistory(
@@ -24,7 +25,10 @@ export function readDashboardHistory(
     if (!raw || raw.trim() === "") return [];
 
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : [];
+
+    if (!Array.isArray(parsed)) return [];
+
+    return parsed;
   } catch {
     return [];
   }

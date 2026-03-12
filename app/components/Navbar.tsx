@@ -10,7 +10,7 @@ import WalletModal from "./WalletModal";
 import { captureRefFromUrl } from "@/lib/referral";
 
 function shortAddr(addr?: string) {
-  if (!addr) return "";
+  if (!addr) return "Not connected";
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
@@ -34,6 +34,11 @@ export default function Navbar() {
     if (!mounted) return;
     captureRefFromUrl();
   }, [mounted]);
+
+  function handleDisconnect() {
+    disconnect();
+    router.push("/");
+  }
 
   if (!mounted) return null;
 
@@ -87,7 +92,7 @@ export default function Navbar() {
 
               <button
                 type="button"
-                onClick={() => disconnect()}
+                onClick={handleDisconnect}
                 className="inline-flex items-center gap-2 rounded-2xl bg-red-500 px-3 py-2 text-sm font-semibold text-white transition hover:bg-red-600 sm:px-4"
               >
                 <LogOut size={15} />

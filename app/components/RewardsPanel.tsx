@@ -1,19 +1,31 @@
 "use client";
 
-import { useWaitForTransactionReceipt, useWriteContract } from "wagmi";
+import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  useAccount,
+  useWriteContract,
+  useWaitForTransactionReceipt,
+} from "wagmi";
+import { Wallet, Gift, TrendingUp, ShieldCheck } from "lucide-react";
 
 import {
-  NOVASTAKE_ABI,
   NOVASTAKE_ADDRESS,
-  SALARY_STAGE_META,
+  NOVASTAKE_ABI,
+  CLAIM_FEE_BPS,
 } from "@/lib/contract";
-import { useNovaUser } from "@/lib/hooks/useNovaUser";
 import { useToastStore } from "@/lib/useToastStore";
+import { useNovaUser } from "@/lib/hooks/useNovaUser";
 
-function formatToken(value?: bigint | null, decimals = 18, max = 4) {
+function cn(...classes: (string | false | undefined)[]) {
+  return classes.filter(Boolean).join(" ");
+}
+
+function formatToken(value?: bigint | null, decimals = 18, max = 2) {
   if (value == null) return "0";
-  const num = Number(value) / 10 ** decimals;
+
+  const num = Number(value.toString()) / 10 ** decimals;
   if (!Number.isFinite(num)) return "0";
+
   return num.toLocaleString(undefined, {
     minimumFractionDigits: 0,
     maximumFractionDigits: max,
@@ -21,229 +33,224 @@ function formatToken(value?: bigint | null, decimals = 18, max = 4) {
 }
 
 export default function RewardsPanel() {
-  const openToast = useToastStore((s) => s.openToast);
-  const { writeContractAsync, data: txHash } = useWriteContract();
+  const { address, isConnected } = useAccount();
+  const { writeContractAsync } = useWriteContract();
+  const { openToast } = useToastStore();
+  const user = useNovaUser();
 
-  const { isLoading: txPending } = useWaitForTransactionReceipt({
-    hash: txHash,
-  });
+  const handledHashRef = useRef<string | null>(null);
 
-  const {
-    rewardBalance,
-    totalPendingRewards,
-    maturedPrincipal,
-    canClaimSalary,
-    salaryStageClaimed,
-    directCount,
-    teamCount,
-    teamVolume,
-    contractTokenBalance,
-    treasuryReferralBalance,
-    refetchAll,
-  } = useNovaUser();
+  const [txHash, setTxHash] = useState<`0x${string}` | undefined>();
+  const [loading, setLoading] = useState(false);
 
-  const nextSalaryStage = SALARY_STAGE_META.find(
-    (stage) => stage.stage === salaryStageClaimed + 1
-  );
+  const { isLoading: txLoading, isSuccess, isError } =
+    useWaitForTransactionReceipt({
+      hash: txHash,
+    });
 
-  async function handleClaimAll() {
+  const pendingRewards = user.totalPendingRewards ?? 0n;
+  const claimableBalance = user.rewardBalance ?? 0n;
+
+  const claimFee = useMemo(() => {
+    return (claimableBalance * BigInt(CLAIM_FEE_BPS)) / 10000n;
+  }, [claimableBalance]);
+
+  const youReceive = useMemo(() => {
+    if (claimableBalance <= 0n) return 0n;
+    return claimableBalance - claimFee;
+  }, [claimableBalance, claimFee]);
+
+  async function claimAllRewards() {
+    if (!address || loading || txLoading || claimableBalance <= 0n) return;
+
     try {
+      setLoading(true);
+
       const hash = await writeContractAsync({
         address: NOVASTAKE_ADDRESS,
         abi: NOVASTAKE_ABI,
         functionName: "claimAll",
       });
 
-      openToast(`Claim All sent: ${hash.slice(0, 10)}...`, "success");
-      await refetchAll();
-    } catch (error: any) {
-      openToast(
-        error?.shortMessage || error?.message || "Claim all failed",
-        "error"
-      );
+      setTxHash(hash);
+      openToast("Claim transaction submitted", "info");
+    } catch (e: any) {
+      openToast(e?.shortMessage || e?.message || "Claim failed", "error");
+      setLoading(false);
+      setTxHash(undefined);
     }
   }
 
-  async function handleClaimSalary() {
-    try {
-      const hash = await writeContractAsync({
-        address: NOVASTAKE_ADDRESS,
-        abi: NOVASTAKE_ABI,
-        functionName: "claimSalary",
-      });
+  useEffect(() => {
+    if (!txHash || !isSuccess) return;
+    if (handledHashRef.current === txHash) return;
 
-      openToast(`Salary claim sent: ${hash.slice(0, 10)}...`, "success");
-      await refetchAll();
-    } catch (error: any) {
-      openToast(
-        error?.shortMessage || error?.message || "Claim salary failed",
-        "error"
-      );
-    }
+    handledHashRef.current = txHash;
+
+    openToast("Rewards claimed successfully ✅", "success");
+    setLoading(false);
+    setTxHash(undefined);
+    user.refetchAll?.();
+  }, [isSuccess, txHash, openToast, user]);
+
+  useEffect(() => {
+    if (!txHash || !isError) return;
+
+    openToast("Transaction failed", "error");
+    setLoading(false);
+    setTxHash(undefined);
+  }, [isError, txHash, openToast]);
+
+  if (!isConnected) {
+    return (
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center">
+        <p className="text-white/70">Connect wallet to view rewards</p>
+      </div>
+    );
   }
 
   return (
-    <section className="rounded-3xl border border-white/10 bg-white/5 p-5 md:p-6">
-      <div className="mb-6">
-        <h2 className="text-2xl font-semibold text-white">Rewards Panel</h2>
-        <p className="mt-1 text-sm text-white/60">
-          Your staking rewards, claimable balance, salary status, and treasury
-          stats.
-        </p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-          <div className="text-sm text-white/50">Reward Balance</div>
-          <div className="mt-2 text-2xl font-semibold text-white">
-            {formatToken(rewardBalance)} NOVA
-          </div>
+    <div className="space-y-4 rounded-3xl border border-white/10 bg-white/5 p-4 md:p-6">
+      <div className="flex items-center gap-3">
+        <div className="rounded-xl bg-yellow-400/15 p-2">
+          <Gift size={18} className="text-yellow-400" />
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-          <div className="text-sm text-white/50">Pending Rewards</div>
-          <div className="mt-2 text-2xl font-semibold text-white">
-            {formatToken(totalPendingRewards)} NOVA
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-          <div className="text-sm text-white/50">Matured Principal</div>
-          <div className="mt-2 text-2xl font-semibold text-white">
-            {formatToken(maturedPrincipal)} NOVA
-          </div>
-        </div>
-
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-          <div className="text-sm text-white/50">Contract Reward Pool</div>
-          <div className="mt-2 text-2xl font-semibold text-white">
-            {formatToken(contractTokenBalance)} NOVA
-          </div>
+        <div>
+          <h2 className="text-xl font-bold text-white">Rewards</h2>
+          <p className="text-sm text-white/55">
+            Track pending income and claim your NOVA rewards
+          </p>
         </div>
       </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-          <div className="text-sm text-white/50">Direct Count</div>
-          <div className="mt-2 text-xl font-semibold text-white">
-            {directCount.toString()}
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+        <StatBox
+          title="Daily Pending"
+          value={`${formatToken(pendingRewards)} NOVA`}
+          icon={<TrendingUp size={15} />}
+          valueClass="text-green-400"
+        />
+
+        <StatBox
+          title="Claimable"
+          value={`${formatToken(claimableBalance)} NOVA`}
+          icon={<Wallet size={15} />}
+          valueClass="text-yellow-300"
+        />
+
+        <StatBox
+          title="Claim Fee"
+          value={`${formatToken(claimFee)} NOVA`}
+          icon={<ShieldCheck size={15} />}
+          valueClass="text-red-300"
+        />
+
+        <StatBox
+          title="You Receive"
+          value={`${formatToken(youReceive)} NOVA`}
+          icon={<Gift size={15} />}
+          valueClass="text-cyan-300"
+        />
+      </div>
+
+      <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <div className="text-sm font-semibold text-white">
+              Reward Summary
+            </div>
+            <div className="mt-1 text-xs text-white/50">
+              Pending rewards come from active stakes. Claimable balance includes
+              rewards already moved to wallet balance.
+            </div>
+          </div>
+
+          <div className="rounded-full bg-yellow-400/10 px-3 py-1 text-xs font-semibold text-yellow-300">
+            Fee {CLAIM_FEE_BPS / 100}%
           </div>
         </div>
 
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-          <div className="text-sm text-white/50">Team Count</div>
-          <div className="mt-2 text-xl font-semibold text-white">
-            {teamCount.toString()}
+        <div className="mt-4 space-y-2 text-sm text-white/70">
+          <div className="flex items-center justify-between">
+            <span>Pending stake rewards</span>
+            <span className="font-semibold text-green-400">
+              {formatToken(pendingRewards)} NOVA
+            </span>
           </div>
-        </div>
 
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-          <div className="text-sm text-white/50">Team Volume</div>
-          <div className="mt-2 text-xl font-semibold text-white">
-            {formatToken(teamVolume)} NOVA
+          <div className="flex items-center justify-between">
+            <span>Claimable wallet balance</span>
+            <span className="font-semibold text-yellow-300">
+              {formatToken(claimableBalance)} NOVA
+            </span>
           </div>
-        </div>
 
-        <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-          <div className="text-sm text-white/50">Treasury Referral Balance</div>
-          <div className="mt-2 text-xl font-semibold text-white">
-            {formatToken(treasuryReferralBalance)} NOVA
+          <div className="flex items-center justify-between">
+            <span>Estimated fee</span>
+            <span className="font-semibold text-red-300">
+              -{formatToken(claimFee)} NOVA
+            </span>
+          </div>
+
+          <div className="h-px bg-white/10" />
+
+          <div className="flex items-center justify-between">
+            <span className="font-semibold text-white">Net receive</span>
+            <span className="text-base font-bold text-cyan-300">
+              {formatToken(youReceive)} NOVA
+            </span>
           </div>
         </div>
       </div>
 
-      <div className="mt-5 rounded-2xl border border-white/10 bg-black/20 p-4">
-        <div className="mb-3 text-lg font-semibold text-white">
-          Salary Progress
-        </div>
-
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <div>
-            <div className="text-xs text-white/50">Current Stage Claimed</div>
-            <div className="mt-1 text-base font-medium text-white">
-              S{salaryStageClaimed}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs text-white/50">Next Stage</div>
-            <div className="mt-1 text-base font-medium text-white">
-              {nextSalaryStage ? `S${nextSalaryStage.stage}` : "Completed"}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs text-white/50">Claimable</div>
-            <div className="mt-1 text-base font-medium text-white">
-              {canClaimSalary ? "Yes" : "No"}
-            </div>
-          </div>
-
-          <div>
-            <div className="text-xs text-white/50">Next Reward</div>
-            <div className="mt-1 text-base font-medium text-white">
-              {nextSalaryStage ? `${nextSalaryStage.reward} NOVA` : "-"}
-            </div>
-          </div>
-        </div>
-
-        {nextSalaryStage && (
-          <div className="mt-4 grid gap-3 md:grid-cols-4">
-            <div className="rounded-xl bg-white/5 p-3">
-              <div className="text-xs text-white/50">Required Direct</div>
-              <div className="mt-1 text-sm text-white">
-                {directCount.toString()} / {nextSalaryStage.direct}
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-white/5 p-3">
-              <div className="text-xs text-white/50">Required Team</div>
-              <div className="mt-1 text-sm text-white">
-                {teamCount.toString()} / {nextSalaryStage.team}
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-white/5 p-3">
-              <div className="text-xs text-white/50">Required Volume</div>
-              <div className="mt-1 text-sm text-white">
-                {formatToken(teamVolume)} / {nextSalaryStage.volume}
-              </div>
-            </div>
-
-            <div className="rounded-xl bg-white/5 p-3">
-              <div className="text-xs text-white/50">Stage Reward</div>
-              <div className="mt-1 text-sm text-white">
-                {nextSalaryStage.reward} NOVA
-              </div>
-            </div>
-          </div>
+      <button
+        type="button"
+        onClick={claimAllRewards}
+        disabled={loading || txLoading || claimableBalance <= 0n}
+        className={cn(
+          "w-full rounded-2xl py-3 font-bold transition",
+          loading || txLoading || claimableBalance <= 0n
+            ? "cursor-not-allowed bg-white/10 text-white/40"
+            : "bg-yellow-400 text-black hover:bg-yellow-300"
         )}
-      </div>
+      >
+        {loading || txLoading ? "Processing..." : "Claim All Rewards"}
+      </button>
 
-      <div className="mt-5 flex flex-wrap gap-3">
-        <button
-          type="button"
-          onClick={handleClaimAll}
-          disabled={txPending || rewardBalance <= 0n}
-          className="rounded-2xl bg-yellow-400 px-5 py-3 text-sm font-semibold text-black disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Claim All
-        </button>
-
-        <button
-          type="button"
-          onClick={handleClaimSalary}
-          disabled={txPending || !canClaimSalary}
-          className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-40"
-        >
-          Claim Salary
-        </button>
+      <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-xs text-white/45">
+        <div>• Pending rewards are still accruing from your active stakes.</div>
+        <div className="mt-1">
+          • Only claimable balance is transferred when you click claim.
+        </div>
+        <div className="mt-1">
+          • Claim transaction applies a {CLAIM_FEE_BPS / 100}% fee.
+        </div>
       </div>
+    </div>
+  );
+}
 
-      <div className="mt-4 text-sm text-white/50">
-        Claim All transfers your NOVA reward balance to wallet with{" "}
-        <span className="text-white">5% treasury fee</span>.
+function StatBox({
+  title,
+  value,
+  icon,
+  valueClass,
+}: {
+  title: string;
+  value: string;
+  icon: React.ReactNode;
+  valueClass?: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
+      <div className="flex items-center gap-2 text-xs text-white/50">
+        {icon}
+        <span>{title}</span>
       </div>
-    </section>
+      <div className={cn("mt-2 text-base font-bold", valueClass || "text-white")}>
+        {value}
+      </div>
+    </div>
   );
 }

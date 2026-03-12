@@ -7,7 +7,9 @@ function formatToken(value?: bigint | number | null, decimals = 18, max = 2) {
   if (value == null) return "0.00";
 
   const num =
-    typeof value === "bigint" ? Number(value) / 10 ** decimals : Number(value);
+    typeof value === "bigint"
+      ? Number(value.toString()) / 10 ** decimals
+      : Number(value);
 
   if (!Number.isFinite(num)) return "0.00";
 
@@ -20,7 +22,7 @@ function formatToken(value?: bigint | number | null, decimals = 18, max = 2) {
 export default function TeamTracker() {
   const user = useNovaUser();
 
-  if (!user.isConnected) return null;
+  if (!user?.connected) return null;
 
   const direct = user.directCount ?? 0n;
   const team = user.teamCount ?? 0n;

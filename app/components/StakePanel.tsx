@@ -1,17 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { parseUnits } from "viem";
-import {
-  useAccount,
-  useReadContract,
-  useWaitForTransactionReceipt,
-  useWriteContract,
-} from "wagmi";
-import { ChevronDown, ChevronRight, Triangle } from "lucide-react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { formatUnits, parseUnits } from "viem";
+import { Coins } from "lucide-react";
 
 import {
-  NOVA_DECIMALS,
   NOVASTAKE_ABI,
   NOVASTAKE_ADDRESS,
   NOVA_TOKEN_ABI,
@@ -21,419 +16,382 @@ import {
 import { useNovaUser } from "@/lib/hooks/useNovaUser";
 import { useToastStore } from "@/lib/useToastStore";
 
-function cn(...a: (string | false | undefined)[]) {
-  return a.filter(Boolean).join(" ");
-}
+type PlanItem = {
+  id: number;
+  name: string;
+  days: number;
+  roi: string;
+  totalReturnBps: number;
+};
 
-function formatToken(value?: bigint | null, decimals = 18, max = 2) {
+const TOKEN_DECIMALS = 18;
+const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+const FALLBACK_PLANS: PlanItem[] = [
+  { id: 0, name: "Starter", days: 7, roi: "7%", totalReturnBps: 700 },
+  { id: 1, name: "Boost", days: 30, roi: "45%", totalReturnBps: 4500 },
+  { id: 2, name: "Pro", days: 90, roi: "160%", totalReturnBps: 16000 },
+  { id: 3, name: "VIP", days: 180, roi: "400%", totalReturnBps: 40000 },
+  { id: 4, name: "Elite", days: 360, roi: "900%", totalReturnBps: 90000 },
+];
+
+function formatToken(value: bigint | undefined, max = 4) {
   if (value == null) return "0";
-  const num = Number(value) / 10 ** decimals;
-  if (!Number.isFinite(num)) return "0";
-  return num.toLocaleString(undefined, {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: max,
-  });
+  const raw = formatUnits(value, TOKEN_DECIMALS);
+  const [whole, frac = ""] = raw.split(".");
+  if (!frac) return whole;
+  const trimmed = frac.slice(0, max).replace(/0+$/, "");
+  return trimmed ? `${whole}.${trimmed}` : whole;
 }
 
-function formatDate(ts?: bigint | null) {
-  if (ts == null || ts === 0n) return "-";
-  return new Date(Number(ts) * 1000).toLocaleDateString();
+function getPlans(): PlanItem[] {
+  if (Array.isArray(PLAN_META) && PLAN_META.length > 0) {
+    return PLAN_META.map((item: any, index: number) => ({
+      id: Number(item.id ?? index),
+      name: String(item.name ?? `Plan ${index + 1}`),
+      days: Number(item.days ?? item.durationDays ?? 0),
+      roi: String(item.roi ?? `${Number(item.totalReturnBps ?? 0) / 100}%`),
+      totalReturnBps: Number(item.totalReturnBps ?? 0),
+    }));
+  }
+
+  return FALLBACK_PLANS;
 }
 
-function getPlanSub(planId: number) {
-  if (planId === 0) return "Daily ROI";
-  if (planId === 1) return "45% total";
-  if (planId === 2) return "160% total";
-  if (planId === 3) return "400% total";
-  if (planId === 4) return "900% total";
-  return "-";
+function getReferrerFromUrl(ref: string | null, selfAddress?: string) {
+  if (!ref) return ZERO_ADDRESS as `0x${string}`;
+  if (!/^0x[a-fA-F0-9]{40}$/.test(ref)) return ZERO_ADDRESS as `0x${string}`;
+  if (selfAddress && ref.toLowerCase() === selfAddress.toLowerCase()) {
+    return ZERO_ADDRESS as `0x${string}`;
+  }
+  return ref as `0x${string}`;
 }
 
 export default function StakePanel() {
+  const plans = useMemo(() => getPlans(), []);
   const { address, isConnected } = useAccount();
-  const openToast = useToastStore((s) => s.openToast);
+  const searchParams = useSearchParams();
+  const user = useNovaUser();
+  const { openToast } = useToastStore();
+
+  const handledHashRef = useRef<string | null>(null);
+
+  const [selectedPlan, setSelectedPlan] = useState<number>(plans[0]?.id ?? 0);
+  const [amount, setAmount] = useState("");
+  const [referrer, setReferrer] = useState<`0x${string}`>(
+    ZERO_ADDRESS as `0x${string}`
+  );
 
   const {
-    stakes,
-    walletTokenBalance,
-    rewardBalance,
-    refetchAll,
-    isLoading,
-  } = useNovaUser();
+    data: txHash,
+    writeContract,
+    isPending: isWritePending,
+    error: writeError,
+  } = useWriteContract();
 
-  const [selectedPlan, setSelectedPlan] = useState<number>(0);
-  const [amount, setAmount] = useState("");
-  const [referrer, setReferrer] = useState("");
-  const [showGuide, setShowGuide] = useState(false);
-  const [activeTab, setActiveTab] = useState<"plans" | "mystaking">("plans");
+  const { isLoading: isConfirming, isSuccess: isConfirmed } =
+    useWaitForTransactionReceipt({
+      hash: txHash,
+    });
 
-  const { writeContractAsync, data: txHash } = useWriteContract();
+  useEffect(() => {
+    const urlRef = searchParams.get("ref");
+    setReferrer(getReferrerFromUrl(urlRef, address));
+  }, [searchParams, address]);
 
-  const { isLoading: txPending } = useWaitForTransactionReceipt({
-    hash: txHash,
-  });
+  useEffect(() => {
+    if (writeError) {
+      openToast(writeError.message || "Transaction failed.", "error");
+    }
+  }, [writeError, openToast]);
+
+  useEffect(() => {
+    if (!txHash || !isConfirmed) return;
+    if (handledHashRef.current === txHash) return;
+
+    handledHashRef.current = txHash;
+
+    setAmount("");
+    user.refetchAll?.();
+    openToast("Transaction confirmed successfully.", "success");
+  }, [isConfirmed, txHash, openToast, user]);
+
+  const selected = useMemo(
+    () => plans.find((p) => p.id === selectedPlan) ?? plans[0],
+    [plans, selectedPlan]
+  );
 
   const parsedAmount = useMemo(() => {
     try {
-      if (!amount.trim()) return 0n;
-      return parseUnits(amount, NOVA_DECIMALS);
+      if (!amount || Number(amount) <= 0) return 0n;
+      return parseUnits(amount, TOKEN_DECIMALS);
     } catch {
       return 0n;
     }
   }, [amount]);
 
-  const allowanceRead = useReadContract({
-    address: NOVA_TOKEN_ADDRESS,
-    abi: NOVA_TOKEN_ABI,
-    functionName: "allowance",
-    args: address ? [address, NOVASTAKE_ADDRESS] : undefined,
-    query: {
-      enabled: Boolean(address),
-      refetchInterval: 8000,
-    },
-  });
+  const walletBalance = user.walletTokenBalance ?? 0n;
+  const allowance = user.allowance ?? 0n;
 
-  const allowance = (allowanceRead.data as bigint | undefined) ?? 0n;
-  const needsApproval = parsedAmount > 0n && allowance < parsedAmount;
-  const busy = txPending;
+  const minimumStake = 10n * 10n ** BigInt(TOKEN_DECIMALS);
+  const belowMin = parsedAmount > 0n && parsedAmount < minimumStake;
+  const canApprove = parsedAmount > 0n && allowance < parsedAmount;
+  const canStake = parsedAmount > 0n && allowance >= parsedAmount;
+  const isBusy = isWritePending || isConfirming;
 
-  async function handleApprove() {
-    try {
-      if (parsedAmount <= 0n) {
-        openToast("Please enter a valid NOVA amount first.", "error");
-        return;
-      }
+  const expectedReward = useMemo(() => {
+    if (!selected || parsedAmount <= 0n) return "0";
+    const reward = (parsedAmount * BigInt(selected.totalReturnBps)) / 10000n;
+    return formatToken(reward);
+  }, [selected, parsedAmount]);
 
-      const hash = await writeContractAsync({
-        address: NOVA_TOKEN_ADDRESS,
-        abi: NOVA_TOKEN_ABI,
-        functionName: "approve",
-        args: [NOVASTAKE_ADDRESS, parsedAmount],
-      });
+  const totalReturn = useMemo(() => {
+    if (!selected || parsedAmount <= 0n) return "0";
+    const reward = (parsedAmount * BigInt(selected.totalReturnBps)) / 10000n;
+    return formatToken(parsedAmount + reward);
+  }, [selected, parsedAmount]);
 
-      openToast(`Approve sent: ${hash.slice(0, 10)}...`, "success");
-      await Promise.all([allowanceRead.refetch(), refetchAll()]);
-    } catch (error: any) {
-      openToast(error?.shortMessage || error?.message || "Approve failed", "error");
-    }
+  function handleMax() {
+    setAmount(formatToken(walletBalance, 6));
   }
 
-  async function handleStake(planId: number) {
-    try {
-      if (!isConnected || !address) {
-        openToast("Please connect wallet first.", "error");
-        return;
-      }
-
-      if (parsedAmount <= 0n) {
-        openToast("Please enter a valid NOVA amount.", "error");
-        return;
-      }
-
-      const finalReferrer =
-        referrer.trim() && /^0x[a-fA-F0-9]{40}$/.test(referrer.trim())
-          ? (referrer.trim() as `0x${string}`)
-          : "0x0000000000000000000000000000000000000000";
-
-      const hash = await writeContractAsync({
-        address: NOVASTAKE_ADDRESS,
-        abi: NOVASTAKE_ABI,
-        functionName: "stake",
-        args: [planId, parsedAmount, finalReferrer],
-      });
-
-      openToast(`Stake sent: ${hash.slice(0, 10)}...`, "success");
-      setAmount("");
-      setReferrer("");
-      setSelectedPlan(planId);
-      setActiveTab("mystaking");
-
-      await Promise.all([allowanceRead.refetch(), refetchAll()]);
-    } catch (error: any) {
-      openToast(error?.shortMessage || error?.message || "Stake failed", "error");
+  function approveToken() {
+    if (!isConnected || !address) {
+      openToast("Please connect your wallet first.", "error");
+      return;
     }
+
+    if (parsedAmount <= 0n) {
+      openToast("Enter a valid NOVA amount.", "error");
+      return;
+    }
+
+    if (belowMin) {
+      openToast("Minimum stake is 10 NOVA.", "error");
+      return;
+    }
+
+    writeContract({
+      address: NOVA_TOKEN_ADDRESS,
+      abi: NOVA_TOKEN_ABI,
+      functionName: "approve",
+      args: [NOVASTAKE_ADDRESS, parsedAmount],
+    });
+
+    openToast("Please confirm the approval transaction in your wallet.", "info");
   }
 
-  async function handleClaimReward(index: number) {
-    try {
-      const hash = await writeContractAsync({
-        address: NOVASTAKE_ADDRESS,
-        abi: NOVASTAKE_ABI,
-        functionName: "claimReward",
-        args: [BigInt(index)],
-      });
+  function stakeNow() {
+    if (!isConnected || !address) {
+      openToast("Please connect your wallet first.", "error");
+      return;
+    }
 
-      openToast(`Claim reward sent: ${hash.slice(0, 10)}...`, "success");
-      await refetchAll();
-    } catch (error: any) {
+    if (parsedAmount <= 0n) {
+      openToast("Enter a valid NOVA amount.", "error");
+      return;
+    }
+
+    if (belowMin) {
+      openToast("Minimum stake is 10 NOVA.", "error");
+      return;
+    }
+
+    if (walletBalance < parsedAmount) {
       openToast(
-        error?.shortMessage || error?.message || "Claim reward failed",
+        "Your wallet balance is lower than the entered amount.",
         "error"
       );
+      return;
     }
+
+    writeContract({
+      address: NOVASTAKE_ADDRESS,
+      abi: NOVASTAKE_ABI,
+      functionName: "stake",
+      args: [selected.id, parsedAmount, referrer],
+    });
+
+    openToast("Please confirm the staking transaction in your wallet.", "info");
   }
-
-  async function handleWithdrawStake(index: number) {
-    try {
-      const hash = await writeContractAsync({
-        address: NOVASTAKE_ADDRESS,
-        abi: NOVASTAKE_ABI,
-        functionName: "withdrawStake",
-        args: [BigInt(index)],
-      });
-
-      openToast(`Withdraw sent: ${hash.slice(0, 10)}...`, "success");
-      await refetchAll();
-    } catch (error: any) {
-      openToast(
-        error?.shortMessage || error?.message || "Withdraw stake failed",
-        "error"
-      );
-    }
-  }
-
-  const sortedStakes = useMemo(() => {
-    return [...(stakes ?? [])].sort((a, b) => Number(b.startTime) - Number(a.startTime));
-  }, [stakes]);
 
   return (
-    <section className="space-y-5">
-      <div className="rounded-[28px] border border-[#5f421f] bg-[linear-gradient(180deg,rgba(23,18,17,0.96),rgba(10,10,14,0.98))] p-4 shadow-[0_0_60px_rgba(255,170,20,0.06)] md:p-6">
-        <div className="flex gap-8 border-b border-[#4a3620] pb-3">
-          <button
-            type="button"
-            onClick={() => setActiveTab("plans")}
-            className={cn(
-              "relative pb-2 text-xl font-semibold transition",
-              activeTab === "plans" ? "text-white" : "text-white/60"
-            )}
-          >
-            Staking Plans
-            {activeTab === "plans" && (
-              <span className="absolute bottom-0 left-0 h-[3px] w-full rounded-full bg-gradient-to-r from-[#ffcf45] via-[#ffb400] to-[#ffea9f]" />
-            )}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("mystaking")}
-            className={cn(
-              "relative pb-2 text-xl font-semibold transition",
-              activeTab === "mystaking" ? "text-white" : "text-white/60"
-            )}
-          >
-            My Staking
-            {activeTab === "mystaking" && (
-              <span className="absolute bottom-0 left-0 h-[3px] w-full rounded-full bg-gradient-to-r from-[#ffcf45] via-[#ffb400] to-[#ffea9f]" />
-            )}
-          </button>
-        </div>
-
-        <button
-          type="button"
-          onClick={() => setShowGuide((p) => !p)}
-          className="mt-5 flex items-center gap-2 text-left text-lg text-white/75"
-        >
-          How does staking work?
-          {showGuide ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
-        </button>
-
-        {showGuide && (
-          <div className="mt-3 rounded-2xl border border-[#49361e] bg-black/30 p-4 text-sm text-white/65">
-            1. Enter NOVA amount. <br />
-            2. Approve token once. <br />
-            3. Select a staking plan and press Stake. <br />
-            4. Claim daily rewards or withdraw after maturity.
-          </div>
-        )}
-
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <div>
-            <label className="mb-2 block text-sm text-white/70">
-              Stake Amount (NOVA)
-            </label>
-            <input
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="10"
-              className="w-full rounded-2xl border border-[#5a4121] bg-black/25 px-4 py-3 text-white outline-none placeholder:text-white/25"
-            />
-            <div className="mt-2 text-xs text-white/45">
-              Wallet Balance: {formatToken(walletTokenBalance)} NOVA
-            </div>
+    <section className="mx-auto w-full max-w-6xl px-4 py-6">
+      <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-xl backdrop-blur md:p-6">
+          <div className="mb-5">
+            <h2 className="text-2xl font-bold text-white md:text-3xl">
+              Stake NOVA
+            </h2>
+            <p className="mt-2 text-sm text-zinc-400 md:text-base">
+              Simple and secure staking. Choose a plan, approve your NOVA, then
+              stake.
+            </p>
           </div>
 
-          <div>
-            <label className="mb-2 block text-sm text-white/70">
-              Referrer Address (optional)
-            </label>
-            <input
-              value={referrer}
-              onChange={(e) => setReferrer(e.target.value)}
-              placeholder="0x..."
-              className="w-full rounded-2xl border border-[#5a4121] bg-black/25 px-4 py-3 text-white outline-none placeholder:text-white/25"
-            />
-            <div className="mt-2 text-xs text-white/45">
-              Reward Balance: {formatToken(rewardBalance)} NOVA
-            </div>
-          </div>
-        </div>
-
-        {needsApproval && (
-          <div className="mt-4">
-            <button
-              type="button"
-              onClick={handleApprove}
-              disabled={busy}
-              className="rounded-full bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15 disabled:opacity-50"
-            >
-              {busy ? "Processing..." : "Approve NOVA"}
-            </button>
-          </div>
-        )}
-
-        {activeTab === "plans" ? (
-          <div className="mt-6 space-y-4">
-            {PLAN_META.map((plan) => {
-              const selected = selectedPlan === plan.id;
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {plans.map((plan) => {
+              const active = selectedPlan === plan.id;
 
               return (
-                <div
+                <button
                   key={plan.id}
-                  className={cn(
-                    "group relative overflow-hidden rounded-[28px] border p-5 transition-all md:p-6",
-                    selected
-                      ? "border-[#d39b2b] bg-[radial-gradient(circle_at_right_center,rgba(255,180,0,0.18),transparent_35%),linear-gradient(180deg,rgba(23,18,17,0.96),rgba(10,10,14,0.98))] shadow-[0_0_30px_rgba(255,184,28,0.10)]"
-                      : "border-[#5a4121] bg-[radial-gradient(circle_at_right_center,rgba(255,180,0,0.10),transparent_30%),linear-gradient(180deg,rgba(23,18,17,0.96),rgba(10,10,14,0.98))]"
-                  )}
+                  type="button"
+                  onClick={() => setSelectedPlan(plan.id)}
+                  className={`rounded-2xl border p-4 text-left transition ${
+                    active
+                      ? "border-amber-400 bg-amber-400/10"
+                      : "border-white/10 bg-black/20 hover:border-white/20"
+                  }`}
                 >
-                  <div className="absolute inset-0 bg-[url('/gold-noise.png')] opacity-[0.05] mix-blend-screen" />
-
-                  <div className="relative flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
-                    <div className="flex items-start gap-4">
-                      <div className="mt-1 flex h-12 w-12 items-center justify-center rounded-xl bg-gradient-to-br from-[#ffcf45] to-[#c88300] text-black shadow-[0_0_18px_rgba(255,200,60,0.18)]">
-                        <Triangle size={24} fill="currentColor" />
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-lg font-bold text-white">
+                        {plan.name}
                       </div>
-
-                      <div>
-                        <div className="text-[38px] font-semibold leading-none text-white">
-                          {plan.name}
-                        </div>
-                        <div className="mt-3 text-[15px] text-white/60">
-                          {plan.id === 0 ? "Daily ROI" : "APR"}
-                          <span className="ml-2 text-[#ffcf45]">
-                            {plan.id === 0 ? "Daily ROI" : getPlanSub(plan.id)}
-                          </span>
-                        </div>
+                      <div className="text-sm text-zinc-400">
+                        {plan.days} Days
                       </div>
                     </div>
 
-                    <div className="flex flex-col items-start gap-4 md:items-end">
-                      <div className="text-2xl font-semibold text-white">
-                        <span className="mr-2 text-white/35">NOVA</span>
-                        {formatToken(walletTokenBalance, 18, 0)}
+                    {active ? (
+                      <div className="rounded-full bg-amber-400 px-3 py-1 text-xs font-bold text-black">
+                        Selected
                       </div>
+                    ) : null}
+                  </div>
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedPlan(plan.id);
-                          handleStake(plan.id);
-                        }}
-                        disabled={busy || parsedAmount <= 0n || needsApproval}
-                        className="inline-flex min-w-[160px] items-center justify-center gap-2 rounded-full bg-gradient-to-r from-[#ffd54a] via-[#ffbe0b] to-[#f0a500] px-8 py-3 text-xl font-semibold text-black shadow-[0_0_18px_rgba(255,194,23,0.18)] transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
-                      >
-                        {busy && selectedPlan === plan.id ? "Processing..." : "Stake"}
-                        <ChevronRight size={20} />
-                      </button>
+                  <div className="mt-4 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+                    <div className="text-xs uppercase tracking-wider text-zinc-500">
+                      ROI
+                    </div>
+                    <div className="mt-1 text-lg font-semibold text-amber-300">
+                      {plan.roi}
                     </div>
                   </div>
-                </div>
+                </button>
               );
             })}
           </div>
-        ) : (
-          <div className="mt-6 space-y-4">
-            {isLoading ? (
-              <div className="rounded-2xl border border-[#5a4121] bg-black/20 p-5 text-center text-white/60">
-                Loading...
-              </div>
-            ) : sortedStakes.length === 0 ? (
-              <div className="rounded-2xl border border-[#5a4121] bg-black/20 p-5 text-center text-white/60">
-                No stakes found yet.
-              </div>
-            ) : (
-              sortedStakes.map((stake, idx) => (
-                <div
-                  key={`${stake.index}-${String(stake.startTime ?? 0n)}-${idx}`}
-                  className="rounded-3xl border border-[#5a4121] bg-[linear-gradient(180deg,rgba(23,18,17,0.94),rgba(10,10,14,0.98))] p-5"
-                >
-                  <div className="grid gap-4 md:grid-cols-6">
-                    <Info label="Plan" value={stake.planName} />
-                    <Info label="Amount" value={`${formatToken(stake.amount)} NOVA`} />
-                    <Info
-                      label="Pending Reward"
-                      value={`${formatToken(stake.pendingReward)} NOVA`}
-                      valueClass="text-[#ffcf45]"
-                    />
-                    <Info label="Start" value={formatDate(stake.startTime)} />
-                    <Info label="End" value={formatDate(stake.endTime)} />
-                    <Info
-                      label="Status"
-                      value={
-                        stake.withdrawn
-                          ? "Done"
-                          : stake.matured
-                          ? "Matured"
-                          : "Active"
-                      }
-                    />
-                  </div>
+        </div>
 
-                  <div className="mt-5 flex flex-wrap gap-3">
-                    <button
-                      type="button"
-                      onClick={() => handleClaimReward(stake.index)}
-                      disabled={busy || stake.withdrawn || stake.pendingReward <= 0n}
-                      className="rounded-full bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-white/15 disabled:opacity-40"
-                    >
-                      Claim Reward
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => handleWithdrawStake(stake.index)}
-                      disabled={busy || stake.withdrawn || !stake.matured}
-                      className="rounded-full bg-gradient-to-r from-[#ffd54a] via-[#ffbe0b] to-[#f0a500] px-5 py-2.5 text-sm font-semibold text-black transition disabled:opacity-40"
-                    >
-                      Withdraw Stake
-                    </button>
-                  </div>
-                </div>
-              ))
-            )}
+        <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-xl backdrop-blur md:p-6">
+          <div className="mb-5">
+            <div className="text-sm uppercase tracking-wider text-zinc-500">
+              Selected Plan
+            </div>
+            <h3 className="mt-1 text-2xl font-bold text-white">
+              {selected.name}
+            </h3>
           </div>
-        )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-wider text-zinc-500">
+                Duration
+              </div>
+              <div className="mt-1 text-lg font-semibold text-white">
+                {selected.days} Days
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-wider text-zinc-500">
+                Total ROI
+              </div>
+              <div className="mt-1 text-lg font-semibold text-amber-300">
+                {selected.roi}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-5">
+            <label className="mb-2 block text-sm font-medium text-zinc-300">
+              Stake Amount
+            </label>
+
+            <div className="flex items-center gap-2 rounded-2xl border border-white/10 bg-black/20 p-3">
+              <Coins className="text-amber-400" size={18} />
+              <input
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                inputMode="decimal"
+                placeholder="Enter NOVA amount"
+                className="w-full bg-transparent text-white outline-none placeholder:text-zinc-500"
+              />
+              <button
+                type="button"
+                onClick={handleMax}
+                className="rounded-xl bg-white/10 px-3 py-2 text-sm font-medium text-white"
+              >
+                Max
+              </button>
+            </div>
+
+            <div className="mt-2 text-sm text-zinc-400">
+              Balance: {formatToken(walletBalance)} NOVA
+            </div>
+
+            {belowMin ? (
+              <div className="mt-2 text-sm text-red-400">
+                Minimum stake is 10 NOVA.
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-wider text-zinc-500">
+                Expected Reward
+              </div>
+              <div className="mt-1 text-lg font-semibold text-amber-300">
+                {expectedReward} NOVA
+              </div>
+            </div>
+
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs uppercase tracking-wider text-zinc-500">
+                Total Return
+              </div>
+              <div className="mt-1 text-lg font-semibold text-white">
+                {totalReturn} NOVA
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-6 space-y-3">
+            {canApprove ? (
+              <button
+                type="button"
+                onClick={approveToken}
+                disabled={isBusy}
+                className="w-full rounded-2xl bg-cyan-400 px-4 py-3 font-bold text-black transition disabled:opacity-60"
+              >
+                {isBusy ? "Processing..." : "Approve NOVA"}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={stakeNow}
+                disabled={isBusy || !canStake || belowMin}
+                className="w-full rounded-2xl bg-amber-400 px-4 py-3 font-bold text-black transition disabled:opacity-60"
+              >
+                {isBusy ? "Processing..." : "Stake Now"}
+              </button>
+            )}
+
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4 text-sm leading-6 text-zinc-300">
+              <div className="mb-2 font-semibold text-white">How it works</div>
+              <ul className="space-y-1">
+                <li>• Choose your staking plan</li>
+                <li>• Enter NOVA amount</li>
+                <li>• Approve NOVA first</li>
+                <li>• Then click stake</li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
     </section>
-  );
-}
-
-function Info({
-  label,
-  value,
-  valueClass,
-}: {
-  label: string;
-  value: string;
-  valueClass?: string;
-}) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
-      <div className="text-xs text-white/45">{label}</div>
-      <div className={cn("mt-1 text-sm font-semibold text-white", valueClass)}>
-        {value}
-      </div>
-    </div>
   );
 }

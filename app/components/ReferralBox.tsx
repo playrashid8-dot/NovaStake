@@ -25,7 +25,9 @@ export default function ReferralBox() {
   const [origin, setOrigin] = useState("");
 
   useEffect(() => {
-    setOrigin(window.location.origin);
+    if (typeof window !== "undefined") {
+      setOrigin(window.location.origin);
+    }
   }, []);
 
   const link = useMemo(() => {
@@ -39,7 +41,6 @@ export default function ReferralBox() {
     try {
       await navigator.clipboard.writeText(link);
       setCopied(true);
-
       setTimeout(() => setCopied(false), 2000);
     } catch {}
   }
@@ -67,6 +68,7 @@ export default function ReferralBox() {
           />
 
           <button
+            type="button"
             onClick={copy}
             className={cn(
               "flex items-center justify-center rounded-xl px-3 py-2 transition",
