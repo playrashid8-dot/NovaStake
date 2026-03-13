@@ -54,45 +54,10 @@ export default function PresalePanel() {
       hash: txHash,
     });
 
-  const presaleActiveRead = useReadContract({
-    address: NOVA_PRESALE_ADDRESS,
-    abi: NOVA_PRESALE_ABI,
-    functionName: "presaleActive",
-    query: { refetchInterval: 10000 },
-  });
-
   const minBuyRead = useReadContract({
     address: NOVA_PRESALE_ADDRESS,
     abi: NOVA_PRESALE_ABI,
     functionName: "minBuyUSDT",
-    query: { refetchInterval: 10000 },
-  });
-
-  const maxBuyRead = useReadContract({
-    address: NOVA_PRESALE_ADDRESS,
-    abi: NOVA_PRESALE_ABI,
-    functionName: "maxBuyUSDT",
-    query: { refetchInterval: 10000 },
-  });
-
-  const totalRaisedRead = useReadContract({
-    address: NOVA_PRESALE_ADDRESS,
-    abi: NOVA_PRESALE_ABI,
-    functionName: "totalUSDRaised",
-    query: { refetchInterval: 10000 },
-  });
-
-  const totalSoldRead = useReadContract({
-    address: NOVA_PRESALE_ADDRESS,
-    abi: NOVA_PRESALE_ABI,
-    functionName: "totalNovaSold",
-    query: { refetchInterval: 10000 },
-  });
-
-  const remainingRead = useReadContract({
-    address: NOVA_PRESALE_ADDRESS,
-    abi: NOVA_PRESALE_ABI,
-    functionName: "remainingNovaForSale",
     query: { refetchInterval: 10000 },
   });
 
@@ -112,17 +77,6 @@ export default function PresalePanel() {
     abi: PRESALE_USDT_ABI,
     functionName: "allowance",
     args: address ? [address, NOVA_PRESALE_ADDRESS] : undefined,
-    query: {
-      enabled: Boolean(address),
-      refetchInterval: 10000,
-    },
-  });
-
-  const userInfoRead = useReadContract({
-    address: NOVA_PRESALE_ADDRESS,
-    abi: NOVA_PRESALE_ABI,
-    functionName: "getUserInfo",
-    args: address ? [address] : undefined,
     query: {
       enabled: Boolean(address),
       refetchInterval: 10000,
@@ -150,31 +104,19 @@ export default function PresalePanel() {
   });
 
   const minBuy = (minBuyRead.data as bigint | undefined) ?? 0n;
-  const maxBuy = (maxBuyRead.data as bigint | undefined) ?? 0n;
-  const totalRaised = (totalRaisedRead.data as bigint | undefined) ?? 0n;
-  const totalSold = (totalSoldRead.data as bigint | undefined) ?? 0n;
-  const remaining = (remainingRead.data as bigint | undefined) ?? 0n;
   const usdtBalance = (usdtBalanceRead.data as bigint | undefined) ?? 0n;
   const usdtAllowance = (usdtAllowanceRead.data as bigint | undefined) ?? 0n;
-  const presaleActive = Boolean(presaleActiveRead.data);
   const previewNova = (previewRead.data as bigint | undefined) ?? 0n;
 
-  const userSpent = ((userInfoRead.data as readonly [bigint, bigint, boolean] | undefined)?.[0]) ?? 0n;
-  const userBought = ((userInfoRead.data as readonly [bigint, bigint, boolean] | undefined)?.[1]) ?? 0n;
-
-  const nextTotalSpent = userSpent + parsedAmount;
   const belowMin = parsedAmount > 0n && minBuy > 0n && parsedAmount < minBuy;
-  const aboveMax = parsedAmount > 0n && maxBuy > 0n && nextTotalSpent > maxBuy;
   const insufficientBalance = parsedAmount > 0n && usdtBalance < parsedAmount;
 
   const needsApproval = parsedAmount > 0n && usdtAllowance < parsedAmount;
   const canBuy =
     parsedAmount > 0n &&
     !belowMin &&
-    !aboveMax &&
     !insufficientBalance &&
-    usdtAllowance >= parsedAmount &&
-    presaleActive;
+    usdtAllowance >= parsedAmount;
 
   const isBusy = isWritePending || isConfirming;
 
@@ -188,16 +130,14 @@ export default function PresalePanel() {
       openToast("Please connect your wallet first.", "error");
       return;
     }
+
     if (parsedAmount <= 0n) {
       openToast("Enter valid USDT amount.", "error");
       return;
     }
+
     if (belowMin) {
       openToast(`Minimum buy is ${formatToken(minBuy, USDT_DECIMALS)} USDT`, "error");
-      return;
-    }
-    if (aboveMax) {
-      openToast(`Maximum total buy is ${formatToken(maxBuy, USDT_DECIMALS)} USDT`, "error");
       return;
     }
 
@@ -217,22 +157,17 @@ export default function PresalePanel() {
       openToast("Please connect your wallet first.", "error");
       return;
     }
-    if (!presaleActive) {
-      openToast("Presale is not active.", "error");
-      return;
-    }
+
     if (parsedAmount <= 0n) {
       openToast("Enter valid USDT amount.", "error");
       return;
     }
+
     if (belowMin) {
       openToast(`Minimum buy is ${formatToken(minBuy, USDT_DECIMALS)} USDT`, "error");
       return;
     }
-    if (aboveMax) {
-      openToast(`Maximum total buy is ${formatToken(maxBuy, USDT_DECIMALS)} USDT`, "error");
-      return;
-    }
+
     if (insufficientBalance) {
       openToast("Insufficient USDT balance.", "error");
       return;
@@ -269,10 +204,7 @@ export default function PresalePanel() {
 
     usdtBalanceRead.refetch();
     usdtAllowanceRead.refetch();
-    userInfoRead.refetch();
-    totalRaisedRead.refetch();
-    totalSoldRead.refetch();
-    remainingRead.refetch();
+    previewRead.refetch();
   }, [
     isSuccess,
     txHash,
@@ -280,10 +212,7 @@ export default function PresalePanel() {
     openToast,
     usdtBalanceRead,
     usdtAllowanceRead,
-    userInfoRead,
-    totalRaisedRead,
-    totalSoldRead,
-    remainingRead,
+    previewRead,
   ]);
 
   useEffect(() => {
@@ -300,7 +229,7 @@ export default function PresalePanel() {
   }
 
   return (
-    <section className="mx-auto w-full max-w-6xl px-4 py-6">
+    <section className="mx-auto w-full max-w-4xl px-4 py-6">
       <div className="grid gap-6 lg:grid-cols-[1fr_420px]">
         <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-4 shadow-xl backdrop-blur md:p-6">
           <div className="mb-5">
@@ -312,7 +241,7 @@ export default function PresalePanel() {
             </p>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2">
             <InfoCard
               title="Price"
               value={PRESALE_PRICE_TEXT}
@@ -320,40 +249,10 @@ export default function PresalePanel() {
               valueClass="text-yellow-300"
             />
             <InfoCard
-              title="Min Buy"
+              title="Minimum Buy"
               value={`${formatToken(minBuy, USDT_DECIMALS)} USDT`}
               icon={<ShieldCheck size={16} />}
               valueClass="text-cyan-300"
-            />
-            <InfoCard
-              title="Max Buy"
-              value={`${formatToken(maxBuy, USDT_DECIMALS)} USDT`}
-              icon={<ShieldCheck size={16} />}
-              valueClass="text-orange-300"
-            />
-            <InfoCard
-              title="Status"
-              value={presaleActive ? "Active" : "Closed"}
-              icon={<Coins size={16} />}
-              valueClass={presaleActive ? "text-green-300" : "text-red-300"}
-            />
-          </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            <InfoCard
-              title="Total Raised"
-              value={`${formatToken(totalRaised, USDT_DECIMALS)} USDT`}
-              icon={<Wallet size={16} />}
-            />
-            <InfoCard
-              title="Total NOVA Sold"
-              value={`${formatToken(totalSold, NOVA_DECIMALS)} NOVA`}
-              icon={<Coins size={16} />}
-            />
-            <InfoCard
-              title="Remaining NOVA"
-              value={`${formatToken(remaining, NOVA_DECIMALS)} NOVA`}
-              icon={<Coins size={16} />}
             />
           </div>
 
@@ -378,23 +277,12 @@ export default function PresalePanel() {
 
           <div className="grid grid-cols-2 gap-3">
             <MiniStat
-              title="Your USDT Balance"
+              title="USDT Balance"
               value={`${formatToken(usdtBalance, USDT_DECIMALS)} USDT`}
             />
             <MiniStat
               title="Allowance"
               value={`${formatToken(usdtAllowance, USDT_DECIMALS)} USDT`}
-            />
-          </div>
-
-          <div className="mt-3 grid grid-cols-2 gap-3">
-            <MiniStat
-              title="You Spent"
-              value={`${formatToken(userSpent, USDT_DECIMALS)} USDT`}
-            />
-            <MiniStat
-              title="You Bought"
-              value={`${formatToken(userBought, NOVA_DECIMALS)} NOVA`}
             />
           </div>
 
@@ -427,12 +315,6 @@ export default function PresalePanel() {
               </div>
             ) : null}
 
-            {aboveMax ? (
-              <div className="mt-2 text-sm text-red-400">
-                Maximum total buy is {formatToken(maxBuy, USDT_DECIMALS)} USDT
-              </div>
-            ) : null}
-
             {insufficientBalance ? (
               <div className="mt-2 text-sm text-red-400">
                 Your USDT balance is lower than entered amount.
@@ -440,14 +322,10 @@ export default function PresalePanel() {
             ) : null}
           </div>
 
-          <div className="mt-5 grid grid-cols-2 gap-3">
+          <div className="mt-5">
             <MiniStat
               title="You Receive"
               value={`${formatToken(previewNova, NOVA_DECIMALS)} NOVA`}
-            />
-            <MiniStat
-              title="Price"
-              value={PRESALE_PRICE_TEXT}
             />
           </div>
 
