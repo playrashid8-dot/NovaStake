@@ -9,7 +9,7 @@ import {
   WalletCards,
   Users,
   BadgeDollarSign,
-  Repeat,
+  Ticket,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -19,7 +19,7 @@ const NAV_ITEMS = [
   { key: "rewards", label: "Rewards", icon: <WalletCards size={18} /> },
   { key: "team", label: "Team", icon: <Users size={18} /> },
   { key: "salary", label: "Salary", icon: <BadgeDollarSign size={18} /> },
-  { key: "swap", label: "Swap", icon: <Repeat size={18} /> },
+  { key: "presale", label: "Presale", icon: <Ticket size={18} /> },
 ] as const;
 
 type NavKey = (typeof NAV_ITEMS)[number]["key"];
