@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   useAccount,
   useReadContract,
@@ -38,12 +38,16 @@ function formatToken(value?: bigint | null, decimals = 18, max = 2) {
   return trimmed ? `${whole}.${trimmed}` : whole;
 }
 
+type PendingTask = "telegram" | "whatsapp" | null;
+type TxMode = "telegram" | "whatsapp" | "claim" | null;
+
 export default function AirdropPanel() {
   const { address, isConnected } = useAccount();
   const { openToast } = useToastStore();
   const handledHashRef = useRef<string | null>(null);
 
-  const [txMode, setTxMode] = useState<"telegram" | "whatsapp" | "claim" | null>(null);
+  const [txMode, setTxMode] = useState<TxMode>(null);
+  const [pendingTask, setPendingTask] = useState<PendingTask>(null);
 
   const {
     data: txHash,
@@ -80,7 +84,18 @@ export default function AirdropPanel() {
   });
 
   const breakdown = breakdownRead.data as
-    | readonly [bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint, bigint]
+    | readonly [
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint,
+        bigint
+      ]
     | undefined;
 
   const taskStatus = taskStatusRead.data as readonly [boolean, boolean] | undefined;
@@ -91,8 +106,6 @@ export default function AirdropPanel() {
   const stakeReward = breakdown?.[3] ?? 0n;
   const referralReward = breakdown?.[4] ?? 0n;
   const presaleReward = breakdown?.[5] ?? 0n;
-  const totalEarned = breakdown?.[7] ?? 0n;
-  const totalClaimed = breakdown?.[8] ?? 0n;
   const claimableNow = breakdown?.[9] ?? 0n;
 
   const telegramDone = taskStatus?.[0] ?? false;
@@ -101,7 +114,33 @@ export default function AirdropPanel() {
 
   const isBusy = isWritePending || isConfirming;
 
-  function completeTelegram() {
+  function openTelegramLink() {
+    window.open(TELEGRAM_URL, "_blank", "noopener,noreferrer");
+  }
+
+  function openWhatsappLink() {
+    window.open(WHATSAPP_URL, "_blank", "noopener,noreferrer");
+  }
+
+  function startTelegramTask() {
+    openTelegramLink();
+    setPendingTask("telegram");
+    openToast(
+      "Telegram open ho gaya. Join karke wapas aao, phir Claim Telegram Reward dabao.",
+      "info"
+    );
+  }
+
+  function startWhatsappTask() {
+    openWhatsappLink();
+    setPendingTask("whatsapp");
+    openToast(
+      "WhatsApp open ho gaya. Join karke wapas aao, phir Claim WhatsApp Reward dabao.",
+      "info"
+    );
+  }
+
+  function claimTelegramReward() {
     setTxMode("telegram");
     writeContract({
       address: NOVA_AIRDROP_ADDRESS,
@@ -111,7 +150,7 @@ export default function AirdropPanel() {
     });
   }
 
-  function completeWhatsapp() {
+  function claimWhatsappReward() {
     setTxMode("whatsapp");
     writeContract({
       address: NOVA_AIRDROP_ADDRESS,
@@ -142,11 +181,11 @@ export default function AirdropPanel() {
     handledHashRef.current = txHash;
 
     if (txMode === "telegram") {
+      setPendingTask(null);
       openToast("Telegram reward added ✅", "success");
-      window.open(TELEGRAM_URL, "_blank", "noopener,noreferrer");
     } else if (txMode === "whatsapp") {
+      setPendingTask(null);
       openToast("WhatsApp reward added ✅", "success");
-      window.open(WHATSAPP_URL, "_blank", "noopener,noreferrer");
     } else if (txMode === "claim") {
       openToast("Airdrop claimed successfully ✅", "success");
     }
@@ -162,36 +201,36 @@ export default function AirdropPanel() {
 
   if (!isConnected) {
     return (
-      <div className="rounded-3xl border border-white/10 bg-white/5 p-6 text-center text-white/80">
+      <div className="rounded-2xl border border-white/10 bg-white/5 p-5 text-center text-sm text-white/80">
         Connect wallet to view Nova Airdrop
       </div>
     );
   }
 
   return (
-    <section className="mx-auto w-full max-w-5xl px-4 py-6">
-      <div className="space-y-6">
-        <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-xl backdrop-blur md:p-6">
+    <section className="mx-auto w-full max-w-4xl px-3 py-4 md:px-4 md:py-6">
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-lg backdrop-blur md:p-5">
           <div className="flex items-center gap-3">
-            <div className="rounded-2xl bg-yellow-400/10 p-3 text-yellow-300">
-              <Gift size={22} />
+            <div className="rounded-xl bg-yellow-400/10 p-2.5 text-yellow-300">
+              <Gift size={20} />
             </div>
             <div>
-              <h2 className="text-2xl font-bold text-white md:text-3xl">
+              <h2 className="text-xl font-bold text-white md:text-2xl">
                 Nova Airdrop
               </h2>
-              <p className="mt-1 text-sm text-zinc-400">
-                Complete tasks and claim NOVA directly in your wallet.
+              <p className="mt-1 text-xs text-zinc-400 md:text-sm">
+                Complete important tasks and claim NOVA in your wallet.
               </p>
             </div>
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-3 sm:grid-cols-2">
           <TaskCard
             title="Connect Wallet"
             reward="+3 NOVA"
-            icon={<Wallet size={18} />}
+            icon={<Wallet size={16} />}
             done={walletReward > 0n}
             buttonText="Completed"
             onClick={() => {}}
@@ -201,27 +240,51 @@ export default function AirdropPanel() {
           <TaskCard
             title="Join Telegram"
             reward="+5 NOVA"
-            icon={<Send size={18} />}
+            icon={<Send size={16} />}
             done={telegramDone}
-            buttonText={telegramDone ? "Completed" : "Join Telegram"}
-            onClick={completeTelegram}
-            disabled={telegramDone || isBusy}
+            buttonText={
+              telegramDone
+                ? "Completed"
+                : pendingTask === "telegram"
+                ? "Claim Reward"
+                : "Open Telegram"
+            }
+            onClick={
+              telegramDone
+                ? openTelegramLink
+                : pendingTask === "telegram"
+                ? claimTelegramReward
+                : startTelegramTask
+            }
+            disabled={isBusy}
           />
 
           <TaskCard
-            title="Join WhatsApp Channel"
+            title="Join WhatsApp"
             reward="+5 NOVA"
-            icon={<MessageCircle size={18} />}
+            icon={<MessageCircle size={16} />}
             done={whatsappDone}
-            buttonText={whatsappDone ? "Completed" : "Join WhatsApp"}
-            onClick={completeWhatsapp}
-            disabled={whatsappDone || isBusy}
+            buttonText={
+              whatsappDone
+                ? "Completed"
+                : pendingTask === "whatsapp"
+                ? "Claim Reward"
+                : "Open WhatsApp"
+            }
+            onClick={
+              whatsappDone
+                ? openWhatsappLink
+                : pendingTask === "whatsapp"
+                ? claimWhatsappReward
+                : startWhatsappTask
+            }
+            disabled={isBusy}
           />
 
           <TaskCard
-            title="Activate First Stake"
+            title="First Stake"
             reward="+5 NOVA"
-            icon={<Sparkles size={18} />}
+            icon={<Sparkles size={16} />}
             done={stakeDone}
             buttonText={stakeDone ? "Completed" : "Pending"}
             onClick={() => {}}
@@ -229,39 +292,12 @@ export default function AirdropPanel() {
           />
         </div>
 
-        <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-xl backdrop-blur md:p-6">
-          <h3 className="text-xl font-bold text-white">Referral Rewards</h3>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <MiniBox title="1 Referral" value="1 NOVA" />
-            <MiniBox title="5 Referrals" value="7 NOVA" />
-            <MiniBox title="10 Referrals" value="15 NOVA" />
-          </div>
-        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-lg backdrop-blur md:p-5">
+          <h3 className="text-lg font-bold text-white">Reward Summary</h3>
 
-        <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-xl backdrop-blur md:p-6">
-          <h3 className="text-xl font-bold text-white">Presale Bonus</h3>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <MiniBox title="Buy 10 USDT" value="+2 NOVA" />
-            <MiniBox title="Buy 50 USDT" value="+7 NOVA" />
-            <MiniBox title="Buy 100 USDT" value="+15 NOVA" />
-          </div>
-        </div>
-
-        <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-xl backdrop-blur md:p-6">
-          <h3 className="text-xl font-bold text-white">Airdrop Summary</h3>
-
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            <MiniBox title="Wallet Reward" value={`${formatToken(walletReward)} NOVA`} />
-            <MiniBox title="Telegram Reward" value={`${formatToken(telegramReward)} NOVA`} />
-            <MiniBox title="WhatsApp Reward" value={`${formatToken(whatsappReward)} NOVA`} />
-            <MiniBox title="Stake Reward" value={`${formatToken(stakeReward)} NOVA`} />
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
             <MiniBox title="Referral Reward" value={`${formatToken(referralReward)} NOVA`} />
             <MiniBox title="Presale Bonus" value={`${formatToken(presaleReward)} NOVA`} />
-          </div>
-
-          <div className="mt-5 grid gap-3 sm:grid-cols-3">
-            <MiniBox title="Total Earned" value={`${formatToken(totalEarned)} NOVA`} />
-            <MiniBox title="Already Claimed" value={`${formatToken(totalClaimed)} NOVA`} />
             <MiniBox title="Claimable Now" value={`${formatToken(claimableNow)} NOVA`} />
           </div>
 
@@ -270,7 +306,7 @@ export default function AirdropPanel() {
             onClick={claimAirdrop}
             disabled={isBusy || claimableNow <= 0n}
             className={cn(
-              "mt-5 w-full rounded-2xl px-4 py-3 font-bold transition",
+              "mt-4 w-full rounded-2xl px-4 py-3 text-sm font-bold transition md:text-base",
               isBusy || claimableNow <= 0n
                 ? "cursor-not-allowed bg-white/10 text-white/40"
                 : "bg-yellow-400 text-black hover:bg-yellow-300"
@@ -302,17 +338,21 @@ function TaskCard({
   disabled?: boolean;
 }) {
   return (
-    <div className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 shadow-xl backdrop-blur">
+    <div className="rounded-2xl border border-white/10 bg-white/[0.04] p-4 shadow-lg backdrop-blur">
       <div className="flex items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <div className="rounded-2xl bg-white/10 p-3 text-yellow-300">{icon}</div>
-          <div>
-            <div className="text-lg font-bold text-white">{title}</div>
-            <div className="mt-1 text-sm text-zinc-400">{reward}</div>
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="rounded-xl bg-white/10 p-2.5 text-yellow-300">
+            {icon}
+          </div>
+          <div className="min-w-0">
+            <div className="truncate text-base font-bold text-white md:text-lg">
+              {title}
+            </div>
+            <div className="mt-1 text-xs text-zinc-400 md:text-sm">{reward}</div>
           </div>
         </div>
 
-        {done ? <CheckCircle2 size={20} className="text-green-400" /> : null}
+        {done ? <CheckCircle2 size={18} className="shrink-0 text-green-400" /> : null}
       </div>
 
       <button
@@ -320,9 +360,11 @@ function TaskCard({
         onClick={onClick}
         disabled={disabled}
         className={cn(
-          "mt-4 w-full rounded-2xl px-4 py-3 font-semibold transition",
+          "mt-3 w-full rounded-xl px-4 py-2.5 text-sm font-semibold transition",
           disabled
             ? "cursor-not-allowed bg-white/10 text-white/50"
+            : done
+            ? "border border-white/10 bg-black/20 text-white hover:border-white/20 hover:bg-black/30"
             : "bg-yellow-400 text-black hover:bg-yellow-300"
         )}
       >
@@ -340,9 +382,13 @@ function MiniBox({
   value: string;
 }) {
   return (
-    <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-      <div className="text-xs uppercase tracking-wider text-zinc-500">{title}</div>
-      <div className="mt-2 text-lg font-semibold text-white">{value}</div>
+    <div className="rounded-xl border border-white/10 bg-black/20 p-3.5">
+      <div className="text-[11px] uppercase tracking-wider text-zinc-500">
+        {title}
+      </div>
+      <div className="mt-1.5 text-base font-semibold text-white md:text-lg">
+        {value}
+      </div>
     </div>
   );
 }
