@@ -11,6 +11,7 @@ import ReferralBox from "@/app/components/ReferralBox";
 import SalaryPanel from "@/app/components/SalaryPanel";
 import HomeOverviewSection from "@/app/components/HomeOverviewSection";
 import PresalePanel from "@/app/components/PresalePanel";
+import AirdropPanel from "@/app/components/AirdropPanel";
 import { useNovaUser } from "@/lib/hooks/useNovaUser";
 
 const ALLOWED_TABS = new Set([
@@ -21,6 +22,7 @@ const ALLOWED_TABS = new Set([
   "rewards",
   "salary",
   "presale",
+  "airdrop",
 ]);
 
 function formatToken(
@@ -85,7 +87,7 @@ export default function DashboardContent() {
               </div>
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3">
+            <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
               <ActionMiniButton
                 label="Stake Now"
                 primary
@@ -110,6 +112,10 @@ export default function DashboardContent() {
               <ActionMiniButton
                 label="Presale"
                 onClick={() => router.push("/dashboard?tab=presale")}
+              />
+              <ActionMiniButton
+                label="Airdrop"
+                onClick={() => router.push("/dashboard?tab=airdrop")}
               />
             </div>
           </div>
@@ -151,6 +157,12 @@ export default function DashboardContent() {
       {tab === "presale" && (
         <div className="space-y-6">
           <PresalePanel />
+        </div>
+      )}
+
+      {tab === "airdrop" && (
+        <div className="space-y-6">
+          <AirdropPanel />
         </div>
       )}
     </div>
