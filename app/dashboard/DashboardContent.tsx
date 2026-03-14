@@ -12,6 +12,7 @@ import SalaryPanel from "@/app/components/SalaryPanel";
 import HomeOverviewSection from "@/app/components/HomeOverviewSection";
 import PresalePanel from "@/app/components/PresalePanel";
 import { useNovaUser } from "@/lib/hooks/useNovaUser";
+import SwapPanel from "@/app/components/SwapPanel";
 
 const ALLOWED_TABS = new Set([
   "home",
@@ -21,6 +22,7 @@ const ALLOWED_TABS = new Set([
   "rewards",
   "salary",
   "presale",
+  "swap",
 ]);
 
 function formatToken(
@@ -111,6 +113,10 @@ export default function DashboardContent() {
                 label="Presale"
                 onClick={() => router.push("/dashboard?tab=presale")}
               />
+              <ActionMiniButton
+                label="Swap"
+                onClick={() => router.push("/dashboard?tab=swap")}
+              />
           
             </div>
           </div>
@@ -152,6 +158,12 @@ export default function DashboardContent() {
       {tab === "presale" && (
         <div className="space-y-6">
           <PresalePanel />
+        </div>
+      )}
+
+      {tab === "swap" && (
+        <div className="space-y-6">
+          <SwapPanel />
         </div>
       )}
 
