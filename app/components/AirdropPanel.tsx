@@ -41,6 +41,10 @@ function formatToken(value?: bigint | null, decimals = 18, max = 2) {
 type PendingTask = "telegram" | "whatsapp" | null;
 type TxMode = "telegram" | "whatsapp" | "claim" | null;
 
+function getPendingTaskKey(address?: string) {
+  return `nova-airdrop-pending-task:${address?.toLowerCase() || "guest"}`;
+}
+
 export default function AirdropPanel() {
   const { address, isConnected } = useAccount();
   const { openToast } = useToastStore();
@@ -114,6 +118,59 @@ export default function AirdropPanel() {
 
   const isBusy = isWritePending || isConfirming;
 
+  useEffect(() => {
+    if (!address || typeof window === "undefined") return;
+    const saved = window.localStorage.getItem(getPendingTaskKey(address));
+    if (saved === "telegram" || saved === "whatsapp") {
+      setPendingTask(saved);
+    } else {
+      setPendingTask(null);
+    }
+  }, [address]);
+
+  useEffect(() => {
+    if (!address || typeof window === "undefined") return;
+    if (pendingTask) {
+      window.localStorage.setItem(getPendingTaskKey(address), pendingTask);
+    } else {
+      window.localStorage.removeItem(getPendingTaskKey(address));
+    }
+  }, [address, pendingTask]);
+
+  useEffect(() => {
+    if (telegramDone && pendingTask === "telegram") {
+      setPendingTask(null);
+    }
+  }, [telegramDone, pendingTask]);
+
+  useEffect(() => {
+    if (whatsappDone && pendingTask === "whatsapp") {
+      setPendingTask(null);
+    }
+  }, [whatsappDone, pendingTask]);
+
+  useEffect(() => {
+    function handleFocus() {
+      breakdownRead.refetch();
+      taskStatusRead.refetch();
+    }
+
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible") {
+        breakdownRead.refetch();
+        taskStatusRead.refetch();
+      }
+    }
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [breakdownRead, taskStatusRead]);
+
   function openTelegramLink() {
     window.open(TELEGRAM_URL, "_blank", "noopener,noreferrer");
   }
@@ -123,8 +180,8 @@ export default function AirdropPanel() {
   }
 
   function startTelegramTask() {
-    openTelegramLink();
     setPendingTask("telegram");
+    openTelegramLink();
     openToast(
       "Telegram open ho gaya. Join karke wapas aao, phir Claim Telegram Reward dabao.",
       "info"
@@ -132,8 +189,8 @@ export default function AirdropPanel() {
   }
 
   function startWhatsappTask() {
-    openWhatsappLink();
     setPendingTask("whatsapp");
+    openWhatsappLink();
     openToast(
       "WhatsApp open ho gaya. Join karke wapas aao, phir Claim WhatsApp Reward dabao.",
       "info"
@@ -141,6 +198,11 @@ export default function AirdropPanel() {
   }
 
   function claimTelegramReward() {
+    if (!address) {
+      openToast("Connect wallet first.", "error");
+      return;
+    }
+
     setTxMode("telegram");
     writeContract({
       address: NOVA_AIRDROP_ADDRESS,
@@ -151,6 +213,11 @@ export default function AirdropPanel() {
   }
 
   function claimWhatsappReward() {
+    if (!address) {
+      openToast("Connect wallet first.", "error");
+      return;
+    }
+
     setTxMode("whatsapp");
     writeContract({
       address: NOVA_AIRDROP_ADDRESS,
@@ -161,6 +228,16 @@ export default function AirdropPanel() {
   }
 
   function claimAirdrop() {
+    if (!address) {
+      openToast("Connect wallet first.", "error");
+      return;
+    }
+
+    if (claimableNow <= 0n) {
+      openToast("No reward available to claim.", "error");
+      return;
+    }
+
     setTxMode("claim");
     writeContract({
       address: NOVA_AIRDROP_ADDRESS,
@@ -244,7 +321,7 @@ export default function AirdropPanel() {
             done={telegramDone}
             buttonText={
               telegramDone
-                ? "Completed"
+                ? "Open Telegram"
                 : pendingTask === "telegram"
                 ? "Claim Reward"
                 : "Open Telegram"
@@ -266,7 +343,7 @@ export default function AirdropPanel() {
             done={whatsappDone}
             buttonText={
               whatsappDone
-                ? "Completed"
+                ? "Open WhatsApp"
                 : pendingTask === "whatsapp"
                 ? "Claim Reward"
                 : "Open WhatsApp"
@@ -296,9 +373,18 @@ export default function AirdropPanel() {
           <h3 className="text-lg font-bold text-white">Reward Summary</h3>
 
           <div className="mt-3 grid gap-3 sm:grid-cols-2">
-            <MiniBox title="Referral Reward" value={`${formatToken(referralReward)} NOVA`} />
-            <MiniBox title="Presale Bonus" value={`${formatToken(presaleReward)} NOVA`} />
-            <MiniBox title="Claimable Now" value={`${formatToken(claimableNow)} NOVA`} />
+            <MiniBox
+              title="Referral Reward"
+              value={`${formatToken(referralReward)} NOVA`}
+            />
+            <MiniBox
+              title="Presale Bonus"
+              value={`${formatToken(presaleReward)} NOVA`}
+            />
+            <MiniBox
+              title="Claimable Now"
+              value={`${formatToken(claimableNow)} NOVA`}
+            />
           </div>
 
           <button
@@ -348,11 +434,15 @@ function TaskCard({
             <div className="truncate text-base font-bold text-white md:text-lg">
               {title}
             </div>
-            <div className="mt-1 text-xs text-zinc-400 md:text-sm">{reward}</div>
+            <div className="mt-1 text-xs text-zinc-400 md:text-sm">
+              {reward}
+            </div>
           </div>
         </div>
 
-        {done ? <CheckCircle2 size={18} className="shrink-0 text-green-400" /> : null}
+        {done ? (
+          <CheckCircle2 size={18} className="shrink-0 text-green-400" />
+        ) : null}
       </div>
 
       <button

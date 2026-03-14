@@ -13,13 +13,15 @@ module.exports = {
       evmVersion: "paris",
     },
   },
+
   networks: {
     bsc: {
-      url: process.env.BSC_MAINNET_RPC_URL,
-      accounts: [process.env.PRIVATE_KEY],
+      url: "https://bsc-dataseed.binance.org/",
+      accounts: [`0x${process.env.PRIVATE_KEY}`],
     },
   },
+
   etherscan: {
-    apiKey: process.env.BSCSCAN_API_KEY,
+    apiKey: process.env.BSCSCAN_API_KEY
   },
 };
